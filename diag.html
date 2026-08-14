@@ -16,7 +16,7 @@
 </style>
 </head>
 <body>
-<h1>云同步诊断 <span class="ver">diag-v1</span></h1>
+<h1>云同步诊断 <span class="ver">diag-v2</span></h1>
 <div class="card" id="env"></div>
 <div class="card"><button id="run">开始诊断</button></div>
 <div class="card" id="results">尚未运行</div>
@@ -47,8 +47,8 @@ document.getElementById('run').addEventListener('click', async function () {
   var out = [];
   this.disabled = true; this.textContent = '诊断中…';
 
-  out.push(await test('1. 能连上 CloudBase 服务器（GET 根路径）', async function () {
-    var r = await fetch(HOST + '/', { method: 'GET', cache: 'no-store' });
+  out.push(await test('1. 能连上 CloudBase 服务器（GET API 路由，501 也算通）', async function () {
+    var r = await fetch(HOST + '/auth/v1/verification', { method: 'GET', cache: 'no-store' });
     return 'HTTP ' + r.status;
   }));
 
