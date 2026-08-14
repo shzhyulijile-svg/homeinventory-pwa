@@ -3,79 +3,100 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>云同步诊断</title>
+<title>云同步诊断 v3</title>
 <style>
   body { font-family: -apple-system, "PingFang SC", sans-serif; margin: 16px; background:#f6f6f6; color:#222; }
   h1 { font-size: 20px; }
   .card { background:#fff; border-radius:10px; padding:14px; margin:12px 0; box-shadow:0 1px 3px rgba(0,0,0,.08); }
   .ok { color:#0a7d2c; font-weight:600; }
   .bad { color:#c0392b; font-weight:600; }
-  pre { white-space:pre-wrap; word-break:break-all; font-size:12px; background:#f0f0f0; padding:8px; border-radius:6px; max-height:220px; overflow:auto; }
-  button { font-size:17px; padding:12px; width:100%; border:0; border-radius:10px; background:#111; color:#fff; }
+  pre { white-space:pre-wrap; word-break:break-all; font-size:12px; background:#f0f0f0; padding:8px; border-radius:6px; max-height:260px; overflow:auto; }
+  button { font-size:17px; padding:12px; width:100%; border:0; border-radius:10px; background:#111; color:#fff; margin-top:8px; }
   .ver { color:#999; font-size:12px; }
 </style>
 </head>
 <body>
-<h1>云同步诊断 <span class="ver">diag-v2</span></h1>
+<h1>云同步诊断 <span class="ver">diag-v3</span></h1>
 <div class="card" id="env"></div>
-<div class="card"><button id="run">开始诊断</button></div>
-<div class="card" id="results">尚未运行</div>
+<div class="card">
+  <button id="runA">测试 A：按 App 原样调用注册（带凭证）</button>
+  <button id="runB">测试 B：同样注册，但强制不带凭证</button>
+</div>
+<div class="card" id="results">说明：两个测试都会用真实 SDK 调用注册接口（邮箱用不存在的 diag 地址，不会打扰任何人）。<b>请先把本页「添加到主屏幕」，从主屏幕图标打开后再测试</b>，这样才和出问题的 App 环境完全一致。在 Safari 里也可以先跑一次做对照。</div>
+<script src="cloudbase-config.js"></script>
+<script src="cloudbase-sdk.js"></script>
 <script>
-var HOST = 'https://myfirst-test-d8ge3c40585d511d4.ap-shanghai.tcb-api.tencentcloudapi.com';
 document.getElementById('env').innerHTML =
   '<div>页面来源 Origin：<b>' + location.origin + '</b></div>' +
+  '<div>显示模式：' + (window.matchMedia('(display-mode: standalone)').matches || navigator.standalone ? '主屏幕 App（独立窗口）' : '浏览器标签页') + '</div>' +
   '<div>online：' + navigator.onLine + '</div>' +
   '<div class="ver">' + navigator.userAgent + '</div>';
+
+var xhrLog = [];
+(function instrument(){
+  var origOpen = XMLHttpRequest.prototype.open;
+  var origSend = XMLHttpRequest.prototype.send;
+  XMLHttpRequest.prototype.open = function(m, u){
+    this.__diag = { method: m, url: String(u) };
+    xhrLog.push('XHR ' + m + ' ' + u);
+    return origOpen.apply(this, arguments);
+  };
+  XMLHttpRequest.prototype.send = function(){
+    var d = this.__diag || {};
+    var self = this;
+    xhrLog.push('  → withCredentials=' + self.withCredentials);
+    this.addEventListener('error', function(){ xhrLog.push('  ✗ XHR error (NetworkError): ' + d.method + ' ' + d.url); });
+    this.addEventListener('load', function(){ xhrLog.push('  ✓ HTTP ' + self.status + ': ' + d.method + ' ' + d.url); });
+    return origSend.apply(this, arguments);
+  };
+})();
+
+function stripCredentialsForTcb() {
+  var origOpen = XMLHttpRequest.prototype.open;
+  var proto = XMLHttpRequest.prototype;
+  var desc = Object.getOwnPropertyDescriptor(proto, 'withCredentials');
+  if (!desc || !desc.set) return '（无法挂钩 withCredentials 属性）';
+  proto.open = function(m, u){ this.__stripCred = String(u).indexOf('tcb-api.tencentcloudapi.com') >= 0; return origOpen.apply(this, arguments); };
+  Object.defineProperty(proto, 'withCredentials', {
+    configurable: true,
+    get: desc.get,
+    set: function(v){ desc.set.call(this, this.__stripCred ? false : v); }
+  });
+  return '已强制 tcb-api 请求 withCredentials=false';
+}
 
 function row(name, ok, detail) {
   return '<div style="margin:10px 0"><span class="' + (ok ? 'ok' : 'bad') + '">' +
     (ok ? '✓ ' : '✗ ') + name + '</span>' + (detail ? '<pre>' + detail + '</pre>' : '') + '</div>';
 }
 
-async function test(name, fn) {
+async function signUpAttempt(label) {
+  xhrLog = [];
+  var app = cloudbase.init(window.HomeInventoryCloudConfig);
+  var auth = (app.auth && typeof app.auth.signUp === 'function') ? app.auth : app.auth({ persistence: 'local' });
   try {
-    var detail = await fn();
-    return row(name, true, detail);
+    var r = await auth.signUp({ email: 'diag-probe-' + Date.now() + '@example.com', password: 'Diag12345abc' });
+    return row(label, true, '注册请求被服务器正常受理（返回了结构化响应）\n' + JSON.stringify(r && Object.keys(r)) + '\n\n请求日志:\n' + xhrLog.join('\n'));
   } catch (e) {
-    var info = '错误名称: ' + (e && e.name) + '\n错误信息: ' + (e && e.message);
-    if (e && e.cause) info += '\ncause: ' + String(e.cause);
-    return row(name, false, info);
+    var msg = (e && e.message) || String(e);
+    // 结构化业务错误（如邮箱/密码规则）也说明网络是通的
+    var business = e && (e.code || /invalid|argument|password|email|验证|规则/i.test(msg)) && !/load failed|failed to fetch/i.test(msg);
+    return row(label, business, '错误名称: ' + (e && e.name) + '\n错误信息: ' + msg + (e && e.code ? '\ncode: ' + e.code : '') + '\n\n请求日志:\n' + xhrLog.join('\n'));
   }
 }
 
-document.getElementById('run').addEventListener('click', async function () {
-  var out = [];
-  this.disabled = true; this.textContent = '诊断中…';
+document.getElementById('runA').addEventListener('click', async function(){
+  this.disabled = true; this.textContent = '测试 A 进行中…';
+  document.getElementById('results').innerHTML = await signUpAttempt('测试 A：SDK 原样注册');
+  this.disabled = false; this.textContent = '测试 A：按 App 原样调用注册（带凭证）';
+});
 
-  out.push(await test('1. 能连上 CloudBase 服务器（GET API 路由，501 也算通）', async function () {
-    var r = await fetch(HOST + '/auth/v1/verification', { method: 'GET', cache: 'no-store' });
-    return 'HTTP ' + r.status;
-  }));
-
-  out.push(await test('2. 注册验证码接口有响应（无效邮箱，应返回结构化错误）', async function () {
-    var r = await fetch(HOST + '/auth/v1/verification', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email: 'not-an-email', action: 'signup' }),
-      cache: 'no-store'
-    });
-    var t = await r.text();
-    return 'HTTP ' + r.status + '\n' + t.slice(0, 400);
-  }));
-
-  out.push(await test('3. 带凭证请求（与 SDK 注册方式一致）', async function () {
-    var r = await fetch(HOST + '/auth/v1/verification', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email: 'not-an-email', action: 'signup' }),
-      credentials: 'include',
-      cache: 'no-store'
-    });
-    return 'HTTP ' + r.status;
-  }));
-
-  document.getElementById('results').innerHTML = out.join('');
-  this.disabled = false; this.textContent = '重新诊断';
+document.getElementById('runB').addEventListener('click', async function(){
+  this.disabled = true; this.textContent = '测试 B 进行中…';
+  var note = stripCredentialsForTcb();
+  var r = await signUpAttempt('测试 B：不带凭证注册');
+  document.getElementById('results').innerHTML = row('凭证剥离挂钩', true, note) + r;
+  this.disabled = false; this.textContent = '测试 B：同样注册，但强制不带凭证';
 });
 </script>
 </body>
