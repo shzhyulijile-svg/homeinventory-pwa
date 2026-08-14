@@ -7,6 +7,28 @@
 
   const COLLECTION = 'home_inventory_snapshots';
 
+  // iOS 主屏幕 PWA（独立窗口）对带凭证的跨域 XHR 会直接报 "Load failed"，
+  // 而 CloudBase 邮箱登录流程不依赖 cookie（令牌在请求体/header 里），
+  // 因此对 CloudBase API 域名强制关闭 withCredentials。
+  function installCloudBaseCredentialStrip() {
+    if (typeof window === 'undefined' || typeof window.XMLHttpRequest !== 'function') return;
+    if (window.XMLHttpRequest.__homeInventoryCredStrip) return;
+    const proto = window.XMLHttpRequest.prototype;
+    const desc = Object.getOwnPropertyDescriptor(proto, 'withCredentials');
+    if (!desc || !desc.set || !desc.configurable) return;
+    const origOpen = proto.open;
+    proto.open = function (method, url) {
+      this.__homeInventoryStripCred = typeof url === 'string' && url.indexOf('tcb-api.tencentcloudapi.com') >= 0;
+      return origOpen.apply(this, arguments);
+    };
+    Object.defineProperty(proto, 'withCredentials', {
+      configurable: true,
+      get: desc.get,
+      set: function (value) { desc.set.call(this, this.__homeInventoryStripCred ? false : value); },
+    });
+    window.XMLHttpRequest.__homeInventoryCredStrip = true;
+  }
+
   function asError(error, fallback) {
     const message = error && error.message ? error.message : fallback;
     const wrapped = new Error(message || 'CloudBase 请求失败');
@@ -60,6 +82,7 @@
     if (!cloudbase || typeof cloudbase.init !== 'function') throw new Error('缺少 CloudBase SDK');
     if (!config.env) throw new Error('缺少 CloudBase 环境 ID');
 
+    installCloudBaseCredentialStrip();
     const app = cloudbase.init(config);
     const auth = getAuth(app);
     const db = app.database();
