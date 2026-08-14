@@ -1,0 +1,497 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<meta name="theme-color" content="#f5f5f7">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="全屋收纳">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<title>全屋收纳数据库</title>
+<style>
+  :root {
+    --bg: #f5f5f7; --card: #ffffff; --text: #1a1a1a; --text2: #666666; --text3: #999999;
+    --border: #e5e5e7; --primary: #1a1a1a; --danger: #ff3b30; --accent: #007aff;
+    --tag1: #007aff; --tag2: #ff2d55; --tag3: #34c759;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg: #000000; --card: #1c1c1e; --text: #ffffff; --text2: #8e8e93; --text3: #636366;
+            --border: #38383a; --primary: #ffffff; --danger: #ff453a; --accent: #0a84ff;
+            --tag1: #0a84ff; --tag2: #ff375f; --tag3: #30d158; }
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; background: var(--bg); color: var(--text); padding: calc(16px + env(safe-area-inset-top)) 16px calc(20px + env(safe-area-inset-bottom)); max-width: 720px; margin: 0 auto; min-height: 100vh; }
+  .header { padding-bottom: 12px; border-bottom: 1px solid var(--border); margin-bottom: 16px; }
+  .header h1 { font-size: 22px; font-weight: 600; }
+  .header p { font-size: 13px; color: var(--text3); margin-top: 4px; }
+  .tabs { display: flex; gap: 4px; margin-bottom: 16px; overflow-x: auto; }
+  .tab { padding: 8px 16px; border-radius: 8px; border: none; background: transparent; color: var(--text2); cursor: pointer; font-size: 14px; white-space: nowrap; transition: .15s; }
+  .tab:hover { background: rgba(128,128,128,0.08); color: var(--text); }
+  .tab.active { background: var(--card); color: var(--text); font-weight: 500; box-shadow: 0 1px 3px rgba(0,0,0,0.06); }
+  .searchbar { display: flex; gap: 8px; margin-bottom: 16px; }
+  .searchbar input { flex: 1; padding: 12px 14px; border: 1px solid var(--border); border-radius: 10px; background: var(--card); color: var(--text); font-size: 15px; outline: none; -webkit-appearance: none; }
+  .searchbar input:focus { border-color: var(--accent); }
+  .searchbar button { padding: 12px 18px; border: none; border-radius: 10px; background: var(--primary); color: var(--bg); cursor: pointer; font-size: 15px; font-weight: 500; }
+  .searchbar button:active { opacity: .8; }
+  .section-title { font-size: 13px; font-weight: 600; color: var(--text2); margin: 20px 0 8px; text-transform: uppercase; letter-spacing: .5px; }
+  .card { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 14px; margin-bottom: 10px; transition: .15s; }
+  .card:active { transform: scale(.995); }
+  .card.expired { border-color: var(--danger); background: rgba(255,59,48,0.06); }
+  .card-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; }
+  .card-name { font-size: 16px; font-weight: 500; color: var(--text); word-break: break-all; }
+  .card-meta { font-size: 13px; color: var(--text3); margin-top: 6px; display: flex; gap: 12px; flex-wrap: wrap; align-items: center; }
+  .card-actions { display: flex; gap: 6px; flex-shrink: 0; }
+  .iconbtn { width: 32px; height: 32px; border: none; border-radius: 8px; background: transparent; color: var(--text2); cursor: pointer; display: flex; align-items: center; justify-content: center; font-size: 16px; }
+  .iconbtn:active { background: rgba(128,128,128,0.12); }
+  .iconbtn.danger { color: var(--danger); }
+  .tag { display: inline-flex; align-items: center; padding: 3px 8px; border-radius: 6px; background: rgba(0,122,255,0.1); color: var(--tag1); font-size: 12px; font-weight: 500; }
+  .tag.room { background: rgba(255,45,85,0.1); color: var(--tag2); }
+  .tag.danger { background: rgba(255,59,48,0.12); color: var(--danger); }
+  .empty { text-align: center; padding: 50px 20px; color: var(--text3); font-size: 14px; }
+  .breadcrumb { font-size: 13px; color: var(--text3); margin-bottom: 12px; }
+  .breadcrumb span { cursor: pointer; }
+  .breadcrumb span:active { opacity: .6; }
+  .toolbar { display: flex; gap: 8px; margin-bottom: 16px; flex-wrap: wrap; }
+  .toolbar button { padding: 10px 14px; border: 1px solid var(--border); border-radius: 10px; background: var(--card); color: var(--text2); cursor: pointer; font-size: 13px; display: flex; align-items: center; gap: 6px; font-weight: 500; }
+  .toolbar button:active { background: rgba(128,128,128,0.08); }
+  .demo-notice { padding: 12px 14px; border-radius: 10px; background: rgba(255,149,0,0.1); color: var(--text2); font-size: 13px; margin-bottom: 16px; }
+  .pwa-install-tip { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 12px 14px; margin: -6px 0 16px; border: 1px solid rgba(0,122,255,0.22); border-radius: 12px; background: rgba(0,122,255,0.08); color: var(--text); }
+  .pwa-install-tip div { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+  .pwa-install-tip strong { font-size: 14px; font-weight: 600; }
+  .pwa-install-tip span { font-size: 12px; line-height: 1.45; color: var(--text2); }
+  .pwa-install-tip button { flex-shrink: 0; min-height: 36px; padding: 7px 10px; border: 1px solid var(--border); border-radius: 8px; background: var(--card); color: var(--accent); font: inherit; font-size: 13px; cursor: pointer; }
+  .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.45); display: none; align-items: flex-end; justify-content: center; z-index: 100; backdrop-filter: blur(4px); }
+  .modal-overlay.show { display: flex; }
+  .modal { background: var(--card); border-radius: 20px 20px 0 0; width: 100%; max-width: 720px; max-height: 85vh; overflow: auto; padding: 20px; animation: slideUp .25s ease; }
+  @keyframes slideUp { from { transform: translateY(100%); } to { transform: translateY(0); } }
+  .modal-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; }
+  .modal-title { font-size: 18px; font-weight: 600; }
+  .form { display: flex; flex-direction: column; gap: 14px; }
+  .form-row { display: flex; flex-direction: column; gap: 6px; }
+  .form-row label { font-size: 13px; color: var(--text2); font-weight: 600; }
+  .form-row input, .form-row select, .form-row textarea { padding: 12px 14px; border: 1px solid var(--border); border-radius: 10px; background: var(--card); color: var(--text); font-size: 15px; outline: none; -webkit-appearance: none; }
+  .form-row input:focus, .form-row select:focus, .form-row textarea:focus { border-color: var(--accent); }
+  .form-row textarea { resize: vertical; min-height: 80px; }
+  .form-actions { display: flex; gap: 10px; margin-top: 6px; }
+  .btn-primary { flex: 1; padding: 14px; border: none; border-radius: 12px; background: var(--primary); color: var(--bg); cursor: pointer; font-size: 16px; font-weight: 600; }
+  .btn-primary:active { opacity: .85; }
+  .btn-secondary { flex: 1; padding: 14px; border: 1px solid var(--border); border-radius: 12px; background: var(--card); color: var(--text); cursor: pointer; font-size: 16px; font-weight: 500; }
+  .btn-secondary:active { background: rgba(128,128,128,0.08); }
+  .result-count { font-size: 13px; color: var(--text3); margin-bottom: 10px; }
+  .panel { display: none; }
+  .panel.active { display: block; }
+  .arrow { font-size: 20px; color: var(--text3); flex-shrink: 0; }
+  @media (max-width: 480px) {
+    body { padding-left: 12px; padding-right: 12px; }
+    .header h1 { font-size: 20px; }
+    .tabs { margin-left: -12px; margin-right: -12px; padding: 0 12px 4px; scrollbar-width: none; }
+    .tabs::-webkit-scrollbar { display: none; }
+    .tab, .toolbar button, .iconbtn { min-height: 44px; }
+    .tab { padding: 10px 14px; }
+    .toolbar { display: grid; grid-template-columns: 1fr 1fr; }
+    .toolbar button { justify-content: center; padding: 10px 8px; }
+    .searchbar input { min-width: 0; }
+    .searchbar button { min-height: 44px; padding-left: 16px; padding-right: 16px; }
+    .modal { max-height: calc(92vh - env(safe-area-inset-top)); padding-bottom: calc(20px + env(safe-area-inset-bottom)); }
+  }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <h1>🏠 全屋收纳数据库</h1>
+  <p>录入每件物品的位置，秒速找到它</p>
+</div>
+
+<div class="tabs">
+  <button class="tab active" data-tab="search" onclick="switchTab('search')">🔍 查找物品</button>
+  <button class="tab" data-tab="browse" onclick="switchTab('browse')">📂 按空间浏览</button>
+  <button class="tab" data-tab="manage" onclick="switchTab('manage')">⚙️ 管理数据</button>
+</div>
+
+<div id="demo" class="demo-notice" style="display:none">✨ 已加载示例数据，可直接体验搜索和浏览功能</div>
+
+<div id="p-search" class="panel active">
+  <div class="searchbar">
+    <input type="text" id="q" placeholder="输入物品名称、标签或备注关键词…" onkeydown="if(event.key==='Enter')doSearch()">
+    <button onclick="doSearch()">搜索</button>
+  </div>
+  <div id="res"></div>
+</div>
+
+<div id="p-browse" class="panel">
+  <div class="breadcrumb" id="bc"></div>
+  <div id="bc-content"></div>
+</div>
+
+<div id="p-manage" class="panel">
+  <div class="toolbar">
+    <button onclick="showAddRoom()">➕ 添加房间</button>
+    <button onclick="showAddSpace()">➕ 添加收纳空间</button>
+    <button onclick="showAddItem()">➕ 添加物品</button>
+    <button onclick="showExportOptions()">📤 导出备份</button>
+    <button onclick="document.getElementById('fimp').click()">📥 导入备份</button>
+    <input type="file" id="fimp" style="display:none" accept=".txt,.json,text/plain,application/json" onchange="importData(this)">
+  </div>
+  <div class="section-title">房间列表</div>
+  <div id="rooms"></div>
+  <div class="section-title">收纳空间列表</div>
+  <div id="spaces"></div>
+  <div class="section-title">物品列表</div>
+  <div id="items"></div>
+</div>
+
+<div class="modal-overlay" id="mod" onclick="if(event.target===this)closeMod()">
+  <div class="modal">
+    <div class="modal-header">
+      <div class="modal-title" id="mod-t">添加</div>
+      <button class="iconbtn" onclick="closeMod()" aria-label="关闭">✕</button>
+    </div>
+    <div id="mod-b"></div>
+  </div>
+</div>
+
+<script src="backup-format.js"></script>
+<script>
+(function(){
+  const SK = 'home_inventory_v2';
+  let D = {rooms:[],spaces:[],items:[]};
+  let BS = {v:'rooms',rid:null,sid:null};
+
+  function load() {
+    try {
+      const r = localStorage.getItem(SK);
+      if(r===null){ loadDemo(); return; }
+      D = JSON.parse(r);
+      if(typeof D!=='object'||D===null) D={rooms:[],spaces:[],items:[]};
+      if(!Array.isArray(D.rooms)) D.rooms=[]; if(!Array.isArray(D.spaces)) D.spaces=[]; if(!Array.isArray(D.items)) D.items=[];
+      const isObj=function(o){return o!==null&&typeof o==='object'&&!Array.isArray(o);};
+      D.rooms=D.rooms.filter(isObj); D.spaces=D.spaces.filter(isObj); D.items=D.items.filter(isObj);
+      normalize(D);
+    } catch(e){ D={rooms:[],spaces:[],items:[]}; }
+  }
+  function save() { try { localStorage.setItem(SK, JSON.stringify(D)); } catch(e){ alert('保存失败：本地存储空间不足或被浏览器禁用'); } }
+  function uid() { return Date.now().toString(36)+Math.random().toString(36).slice(2,5); }
+  function normalize(d) {
+    const idMap = Object.create(null);
+    const fixId = function(o){
+      const old = o.id;
+      if(typeof old!=='string' || !/^[a-z0-9]+$/.test(old)){
+        const nu = uid();
+        o.id = nu;
+        if(old!==undefined && old!==null) idMap[String(old)] = nu;
+      }
+    };
+    d.rooms.forEach(fixId); d.spaces.forEach(fixId); d.items.forEach(fixId);
+    d.spaces.forEach(function(s){ if(idMap[s.roomId]!==undefined) s.roomId=idMap[s.roomId]; });
+    d.items.forEach(function(it){ if(idMap[it.spaceId]!==undefined) it.spaceId=idMap[it.spaceId]; });
+    d.rooms.forEach(function(o){ o.name=String(o.name==null?'':o.name); o.note=String(o.note==null?'':o.note); });
+    d.spaces.forEach(function(o){ o.name=String(o.name==null?'':o.name); o.note=String(o.note==null?'':o.note); });
+    d.items.forEach(function(o){ o.name=String(o.name==null?'':o.name); o.tags=String(o.tags==null?'':o.tags); o.note=String(o.note==null?'':o.note); o.expiry=String(o.expiry==null?'':o.expiry); o.qty=parseInt(o.qty); if(!(o.qty>=1)) o.qty=1; });
+  }
+  function gr(id) { return D.rooms.find(r=>r.id===id); }
+  function gs(id) { return D.spaces.find(s=>s.id===id); }
+  function gi(id) { return D.items.find(i=>i.id===id); }
+  function rs(rid) { return D.spaces.filter(s=>s.roomId===rid); }
+  function si(sid) { return D.items.filter(i=>i.spaceId===sid); }
+  function loc(it) { const sp=gs(it.spaceId), rm=sp?gr(sp.roomId):null; return {room:rm?rm.name:'未知',space:sp?sp.name:'未知',rid:sp?sp.roomId:'',sid:it.spaceId}; }
+  function esc(s) { return (s||'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
+  function isExpired(it) {
+    if(!it.expiry) return false;
+    const today = new Date(); today.setHours(0,0,0,0);
+    const exp = new Date(it.expiry);
+    return exp < today;
+  }
+  function fmtDate(d) {
+    if(!d) return '';
+    const dt = new Date(d);
+    return dt.getFullYear() + '-' + String(dt.getMonth()+1).padStart(2,'0') + '-' + String(dt.getDate()).padStart(2,'0');
+  }
+
+  function loadDemo() {
+    D.rooms=[{id:'r1',name:'客厅',note:''},{id:'r2',name:'卧室',note:'主卧'},{id:'r3',name:'厨房',note:''},{id:'r4',name:'书房',note:''}];
+    D.spaces=[{id:'s1',roomId:'r1',name:'电视柜抽屉',note:'左侧三层'},{id:'s2',roomId:'r1',name:'沙发储物格',note:'L型转角'},{id:'s3',roomId:'r2',name:'衣柜顶层',note:'换季衣物'},{id:'s4',roomId:'r2',name:'床头柜',note:'右侧抽屉'},{id:'s5',roomId:'r3',name:'吊柜',note:'油烟机上方'},{id:'s6',roomId:'r3',name:'地柜拉篮',note:'水槽下方'},{id:'s7',roomId:'r4',name:'书架第三层',note:'靠窗'},{id:'s8',roomId:'r4',name:'抽屉柜',note:'带锁'}];
+    const today = new Date();
+    const past = new Date(today); past.setDate(past.getDate()-30);
+    const future = new Date(today); future.setDate(future.getDate()+180);
+    D.items=[
+      {id:'i1',spaceId:'s1',name:'电视遥控器',tags:'数码,常用',note:'黑色 Sony',qty:1,expiry:''},
+      {id:'i2',spaceId:'s1',name:'空调遥控器',tags:'数码,常用',note:'白色',qty:1,expiry:''},
+      {id:'i3',spaceId:'s2',name:'毛毯',tags:'纺织品',note:'灰色法兰绒',qty:2,expiry:''},
+      {id:'i4',spaceId:'s3',name:'羽绒服',tags:'衣物,冬季',note:'黑色 North Face',qty:1,expiry:''},
+      {id:'i5',spaceId:'s3',name:'厚毛衣',tags:'衣物,冬季',note:'藏青色',qty:3,expiry:''},
+      {id:'i6',spaceId:'s4',name:'眼罩',tags:'日用品',note:'真丝',qty:1,expiry:''},
+      {id:'i7',spaceId:'s4',name:'耳塞',tags:'日用品',note:'3M',qty:1,expiry:''},
+      {id:'i8',spaceId:'s5',name:'花椒',tags:'调料',note:'2025年买',qty:1,expiry:fmtDate(past)},
+      {id:'i9',spaceId:'s5',name:'八角',tags:'调料',note:'',qty:1,expiry:fmtDate(future)},
+      {id:'i10',spaceId:'s6',name:'洗洁精',tags:'清洁',note:'立白',qty:2,expiry:''},
+      {id:'i11',spaceId:'s6',name:'垃圾袋',tags:'日用品',note:'中号',qty:5,expiry:''},
+      {id:'i12',spaceId:'s7',name:'三体全集',tags:'书籍',note:'精装版',qty:1,expiry:''},
+      {id:'i13',spaceId:'s7',name:'Kindle',tags:'数码',note:'Paperwhite',qty:1,expiry:''},
+      {id:'i14',spaceId:'s8',name:'护照',tags:'证件,重要',note:'有效期至2028',qty:1,expiry:'2028-06-15'},
+      {id:'i15',spaceId:'s8',name:'房产证',tags:'证件,重要',note:'',qty:1,expiry:''}
+    ];
+    save();
+    document.getElementById('demo').style.display='block';
+  }
+
+  window.switchTab=function(t){
+    document.querySelectorAll('.tab').forEach(x=>x.classList.remove('active'));
+    document.querySelector('.tab[data-tab="'+t+'"]').classList.add('active');
+    document.querySelectorAll('.panel').forEach(x=>x.classList.remove('active'));
+    document.getElementById('p-'+t).classList.add('active');
+    if(t==='browse') renderBrowse(); if(t==='manage') renderManage();
+  };
+
+  window.doSearch=function(){
+    const q=document.getElementById('q').value.trim().toLowerCase(), c=document.getElementById('res');
+    if(!q){c.innerHTML='<div class="empty">输入关键词开始搜索</div>';return;}
+    const res=D.items.filter(it=>{
+      const l=loc(it);
+      return it.name.toLowerCase().includes(q)||(it.tags&&it.tags.toLowerCase().includes(q))||(it.note&&it.note.toLowerCase().includes(q))||l.room.toLowerCase().includes(q)||l.space.toLowerCase().includes(q);
+    });
+    if(!res.length){c.innerHTML='<div class="empty">未找到匹配的物品</div>';return;}
+    let h='<div class="result-count">找到 '+res.length+' 件物品</div>';
+    res.forEach(it=>h+=itemCard(it,loc(it),true));
+    c.innerHTML=h;
+  };
+
+  function itemCard(it,l,showLoc){
+    const expired=isExpired(it);
+    const tags=it.tags?it.tags.split(/[,，]/).filter(t=>t.trim()).map(t=>'<span class="tag">'+esc(t.trim())+'</span>').join(' '):'';
+    let expiryHtml='';
+    if(it.expiry){
+      expiryHtml='<span class="tag '+ (expired?'danger':'') +'">' + (expired?'⚠️ 已过期 ':'📅 保质期 ') + esc(it.expiry) + '</span>';
+    }
+    return '<div class="card'+(expired?' expired':'')+'"><div class="card-header"><div><div class="card-name">'+esc(it.name)+(it.qty>1?' <span style="color:var(--text3);font-size:13px">×'+it.qty+'</span>':'')+'</div><div class="card-meta">'+(showLoc?'<span>📍 '+esc(l.room)+' · '+esc(l.space)+'</span>':'')+tags+expiryHtml+'</div>'+(it.note?'<div class="card-meta" style="margin-top:4px">'+esc(it.note)+'</div>':'')+'</div><div class="card-actions"><button class="iconbtn" onclick="editItem(\''+it.id+'\')" aria-label="编辑">✏️</button><button class="iconbtn danger" onclick="delItem(\''+it.id+'\')" aria-label="删除">🗑</button></div></div></div>';
+  }
+
+  window.renderBrowse=function(){
+    const bc=document.getElementById('bc'), ct=document.getElementById('bc-content');
+    if(BS.v==='rooms'){
+      bc.innerHTML='<span onclick="bb(\'rooms\')">🏠 全部房间</span>';
+      if(!D.rooms.length){ct.innerHTML='<div class="empty">暂无房间，先去「管理数据」添加吧</div>';return;}
+      ct.innerHTML=D.rooms.map(r=>{
+        const cnt=D.items.filter(i=>{const sp=gs(i.spaceId);return sp&&sp.roomId===r.id;}).length;
+        return '<div class="card" style="cursor:pointer" onclick="br(\''+r.id+'\')"><div class="card-header"><div><div class="card-name">'+esc(r.name)+'</div><div class="card-meta"><span>收纳空间: '+rs(r.id).length+' 个</span><span>物品: '+cnt+' 件</span>'+(r.note?'<span>'+esc(r.note)+'</span>':'')+'</div></div><span class="arrow">›</span></div></div>';
+      }).join('');
+    } else if(BS.v==='room'){
+      const r=gr(BS.rid);
+      if(!r){ BS={v:'rooms',rid:null,sid:null}; renderBrowse(); return; }
+      bc.innerHTML='<span onclick="bb(\'rooms\')">🏠 全部房间</span> / <span>'+esc(r.name)+'</span>';
+      const sp=rs(BS.rid); if(!sp.length){ct.innerHTML='<div class="empty">该房间暂无收纳空间</div>';return;}
+      ct.innerHTML=sp.map(s=>{
+        const cnt=si(s.id).length;
+        return '<div class="card" style="cursor:pointer" onclick="bs(\''+s.id+'\')"><div class="card-header"><div><div class="card-name">'+esc(s.name)+'</div><div class="card-meta"><span>物品: '+cnt+' 件</span>'+(s.note?'<span>'+esc(s.note)+'</span>':'')+'</div></div><span class="arrow">›</span></div></div>';
+      }).join('');
+    } else if(BS.v==='space'){
+      const s=gs(BS.sid);
+      if(!s){ BS={v:'rooms',rid:null,sid:null}; renderBrowse(); return; }
+      const r=gr(s.roomId);
+      bc.innerHTML='<span onclick="bb(\'rooms\')">🏠 全部房间</span> / <span onclick="bb(\'room\',\''+s.roomId+'\')">'+esc(r?r.name:'未知')+'</span> / <span>'+esc(s.name)+'</span>';
+      const its=si(BS.sid); if(!its.length){ct.innerHTML='<div class="empty">该空间暂无物品</div>';return;}
+      ct.innerHTML=its.map(it=>itemCard(it,{room:r?r.name:'未知',space:s.name},false)).join('');
+    }
+  };
+  window.br=function(rid){BS={v:'room',rid:rid};renderBrowse();};
+  window.bs=function(sid){BS={v:'space',sid:sid};renderBrowse();};
+  window.bb=function(v,id){if(v==='rooms')BS={v:'rooms'};else if(v==='room')BS={v:'room',rid:id};renderBrowse();};
+
+  window.renderManage=function(){
+    const rl=document.getElementById('rooms'), sl=document.getElementById('spaces'), il=document.getElementById('items');
+    if(!D.rooms.length)rl.innerHTML='<div class="empty">暂无房间</div>';
+    else rl.innerHTML=D.rooms.map(r=>'<div class="card"><div class="card-header"><div><div class="card-name">'+esc(r.name)+'</div>'+(r.note?'<div class="card-meta">'+esc(r.note)+'</div>':'')+'</div><div class="card-actions"><button class="iconbtn" onclick="editRoom(\''+r.id+'\')" aria-label="编辑">✏️</button><button class="iconbtn danger" onclick="delRoom(\''+r.id+'\')" aria-label="删除">🗑</button></div></div></div>').join('');
+    if(!D.spaces.length)sl.innerHTML='<div class="empty">暂无收纳空间</div>';
+    else sl.innerHTML=D.spaces.map(s=>{const r=gr(s.roomId);return '<div class="card"><div class="card-header"><div><div class="card-name">'+esc(s.name)+'</div><div class="card-meta"><span class="tag room">'+esc(r?r.name:'未知')+'</span>'+(s.note?'<span>'+esc(s.note)+'</span>':'')+'</div></div><div class="card-actions"><button class="iconbtn" onclick="editSpace(\''+s.id+'\')" aria-label="编辑">✏️</button><button class="iconbtn danger" onclick="delSpace(\''+s.id+'\')" aria-label="删除">🗑</button></div></div></div>';}).join('');
+    if(!D.items.length)il.innerHTML='<div class="empty">暂无物品</div>';
+    else il.innerHTML=D.items.map(it=>itemCard(it,loc(it),true)).join('');
+  };
+
+  function rsel(sid){return '<option value="">选择房间</option>'+D.rooms.map(r=>'<option value="'+r.id+'" '+(r.id===sid?'selected':'')+'>'+esc(r.name)+'</option>').join('');}
+  function ssel(sid,rid){const sp=rid?D.spaces.filter(s=>s.roomId===rid):D.spaces; return '<option value="">选择收纳空间</option>'+sp.map(s=>'<option value="'+s.id+'" '+(s.id===sid?'selected':'')+'>'+esc(s.name)+'</option>').join('');}
+  window.ssel=ssel;
+
+  window.showAddRoom=function(){
+    document.getElementById('mod-t').textContent='添加房间';
+    document.getElementById('mod-b').innerHTML='<div class="form"><div class="form-row"><label>房间名称 *</label><input id="f-rn" placeholder="如：客厅、主卧"></div><div class="form-row"><label>备注</label><input id="f-rno" placeholder="可选，如：朝南、带阳台"></div><div class="form-actions"><button class="btn-primary" onclick="subRoom()">保存</button><button class="btn-secondary" onclick="closeMod()">取消</button></div></div>';
+    document.getElementById('mod').classList.add('show');
+  };
+  window.subRoom=function(){
+    const n=document.getElementById('f-rn').value.trim(), o=document.getElementById('f-rno').value.trim();
+    if(!n){alert('请输入房间名称');return;}
+    D.rooms.push({id:uid(),name:n,note:o}); save(); closeMod(); renderManage();
+  };
+  window.editRoom=function(id){
+    const r=gr(id); if(!r)return;
+    document.getElementById('mod-t').textContent='编辑房间';
+    document.getElementById('mod-b').innerHTML='<div class="form"><div class="form-row"><label>房间名称 *</label><input id="f-rn" value="'+esc(r.name)+'"></div><div class="form-row"><label>备注</label><input id="f-rno" value="'+esc(r.note||'')+'"></div><div class="form-actions"><button class="btn-primary" onclick="upRoom(\''+id+'\')">保存</button><button class="btn-secondary" onclick="closeMod()">取消</button></div></div>';
+    document.getElementById('mod').classList.add('show');
+  };
+  window.upRoom=function(id){
+    const n=document.getElementById('f-rn').value.trim(), o=document.getElementById('f-rno').value.trim();
+    if(!n){alert('请输入房间名称');return;}
+    const r=gr(id); if(r){r.name=n;r.note=o;save();closeMod();renderManage();}
+  };
+  window.delRoom=function(id){
+    if(!confirm('删除房间会同时删除其下所有收纳空间和物品，确定吗？'))return;
+    const sids=D.spaces.filter(s=>s.roomId===id).map(s=>s.id);
+    D.rooms=D.rooms.filter(r=>r.id!==id); D.spaces=D.spaces.filter(s=>s.roomId!==id); D.items=D.items.filter(i=>!sids.includes(i.spaceId));
+    save(); BS={v:'rooms',rid:null,sid:null}; renderManage();
+  };
+
+  window.showAddSpace=function(){
+    if(!D.rooms.length){alert('请先添加房间');return;}
+    document.getElementById('mod-t').textContent='添加收纳空间';
+    document.getElementById('mod-b').innerHTML='<div class="form"><div class="form-row"><label>所属房间 *</label><select id="f-sr">'+rsel()+'</select></div><div class="form-row"><label>空间名称 *</label><input id="f-sn" placeholder="如：衣柜顶层、电视柜抽屉"></div><div class="form-row"><label>备注</label><input id="f-sno" placeholder="可选，如：左侧、带锁"></div><div class="form-actions"><button class="btn-primary" onclick="subSpace()">保存</button><button class="btn-secondary" onclick="closeMod()">取消</button></div></div>';
+    document.getElementById('mod').classList.add('show');
+  };
+  window.subSpace=function(){
+    const rid=document.getElementById('f-sr').value, n=document.getElementById('f-sn').value.trim(), o=document.getElementById('f-sno').value.trim();
+    if(!rid){alert('请选择所属房间');return;} if(!n){alert('请输入空间名称');return;}
+    D.spaces.push({id:uid(),roomId:rid,name:n,note:o}); save(); closeMod(); renderManage();
+  };
+  window.editSpace=function(id){
+    const s=gs(id); if(!s)return;
+    document.getElementById('mod-t').textContent='编辑收纳空间';
+    document.getElementById('mod-b').innerHTML='<div class="form"><div class="form-row"><label>所属房间 *</label><select id="f-sr">'+rsel(s.roomId)+'</select></div><div class="form-row"><label>空间名称 *</label><input id="f-sn" value="'+esc(s.name)+'"></div><div class="form-row"><label>备注</label><input id="f-sno" value="'+esc(s.note||'')+'"></div><div class="form-actions"><button class="btn-primary" onclick="upSpace(\''+id+'\')">保存</button><button class="btn-secondary" onclick="closeMod()">取消</button></div></div>';
+    document.getElementById('mod').classList.add('show');
+  };
+  window.upSpace=function(id){
+    const rid=document.getElementById('f-sr').value, n=document.getElementById('f-sn').value.trim(), o=document.getElementById('f-sno').value.trim();
+    if(!rid){alert('请选择所属房间');return;} if(!n){alert('请输入空间名称');return;}
+    const s=gs(id); if(s){s.roomId=rid;s.name=n;s.note=o;save();closeMod();renderManage();}
+  };
+  window.delSpace=function(id){
+    if(!confirm('删除收纳空间会同时删除其中所有物品，确定吗？'))return;
+    D.spaces=D.spaces.filter(s=>s.id!==id); D.items=D.items.filter(i=>i.spaceId!==id);
+    save(); BS={v:'rooms',rid:null,sid:null}; renderManage();
+  };
+
+  window.showAddItem=function(){
+    if(!D.rooms.length){alert('请先添加房间和收纳空间');return;}
+    if(!D.spaces.length){alert('请先添加收纳空间');return;}
+    document.getElementById('mod-t').textContent='添加物品';
+    document.getElementById('mod-b').innerHTML='<div class="form"><div class="form-row"><label>所属房间 *</label><select id="f-ir" onchange="document.getElementById(\'f-is\').innerHTML=ssel(null,this.value)">'+rsel()+'</select></div><div class="form-row"><label>收纳空间 *</label><select id="f-is">'+ssel()+'</select></div><div class="form-row"><label>物品名称 *</label><input id="f-in" placeholder="如：遥控器、护照"></div><div class="form-row"><label>数量</label><input id="f-iq" type="number" min="1" value="1" style="width:80px"></div><div class="form-row"><label>保质期（可选）</label><input id="f-exp" type="date"></div><div class="form-row"><label>标签（用逗号分隔）</label><input id="f-it" placeholder="如：数码,常用,冬季"></div><div class="form-row"><label>备注</label><textarea id="f-ino" placeholder="可选，如：黑色、有效期至2028"></textarea></div><div class="form-actions"><button class="btn-primary" onclick="subItem()">保存</button><button class="btn-secondary" onclick="closeMod()">取消</button></div></div>';
+    document.getElementById('mod').classList.add('show');
+  };
+  window.subItem=function(){
+    const sid=document.getElementById('f-is').value, n=document.getElementById('f-in').value.trim(), q=Math.max(1,parseInt(document.getElementById('f-iq').value)||1), exp=document.getElementById('f-exp').value, t=document.getElementById('f-it').value.trim(), o=document.getElementById('f-ino').value.trim();
+    if(!sid){alert('请选择收纳空间');return;} if(!n){alert('请输入物品名称');return;}
+    D.items.push({id:uid(),spaceId:sid,name:n,tags:t,note:o,qty:q,expiry:exp}); save(); closeMod(); renderManage();
+  };
+  window.editItem=function(id){
+    const it=gi(id); if(!it)return;
+    const sp=gs(it.spaceId);
+    document.getElementById('mod-t').textContent='编辑物品';
+    document.getElementById('mod-b').innerHTML='<div class="form"><div class="form-row"><label>所属房间 *</label><select id="f-ir" onchange="document.getElementById(\'f-is\').innerHTML=ssel(null,this.value)">'+rsel(sp?sp.roomId:'')+'</select></div><div class="form-row"><label>收纳空间 *</label><select id="f-is">'+ssel(it.spaceId,sp?sp.roomId:'')+'</select></div><div class="form-row"><label>物品名称 *</label><input id="f-in" value="'+esc(it.name)+'"></div><div class="form-row"><label>数量</label><input id="f-iq" type="number" min="1" value="'+esc(String(it.qty))+'" style="width:80px"></div><div class="form-row"><label>保质期（可选）</label><input id="f-exp" type="date" value="'+esc(it.expiry||'')+'"></div><div class="form-row"><label>标签（用逗号分隔）</label><input id="f-it" value="'+esc(it.tags||'')+'"></div><div class="form-row"><label>备注</label><textarea id="f-ino">'+esc(it.note||'')+'</textarea></div><div class="form-actions"><button class="btn-primary" onclick="upItem(\''+id+'\')">保存</button><button class="btn-secondary" onclick="closeMod()">取消</button></div></div>';
+    document.getElementById('mod').classList.add('show');
+  };
+  window.upItem=function(id){
+    const sid=document.getElementById('f-is').value, n=document.getElementById('f-in').value.trim(), q=Math.max(1,parseInt(document.getElementById('f-iq').value)||1), exp=document.getElementById('f-exp').value, t=document.getElementById('f-it').value.trim(), o=document.getElementById('f-ino').value.trim();
+    if(!sid){alert('请选择收纳空间');return;} if(!n){alert('请输入物品名称');return;}
+    const it=gi(id); if(it){it.spaceId=sid;it.name=n;it.qty=q;it.expiry=exp;it.tags=t;it.note=o;save();closeMod();renderManage();refreshActive();}
+  };
+  function refreshActive(){ const t=document.querySelector('.tab.active'); const tab=t?t.getAttribute('data-tab'):''; if(tab==='search') doSearch(); else if(tab==='browse') renderBrowse(); }
+  window.delItem=function(id){ if(!confirm('确定删除该物品吗？'))return; D.items=D.items.filter(i=>i.id!==id); save(); renderManage(); refreshActive(); };
+
+  window.closeMod=function(){ document.getElementById('mod').classList.remove('show'); };
+
+  function exportText(){
+    const lines=['全屋收纳清单','导出时间：'+new Date().toLocaleString('zh-CN'),''];
+    let totalQty=0;
+    D.items.forEach(function(it){ totalQty+=Number(it.qty)||1; });
+    lines.push('共 '+D.rooms.length+' 个房间，'+D.spaces.length+' 个收纳空间，'+D.items.length+' 种物品（合计 '+totalQty+' 件）','');
+    D.rooms.forEach(function(room){
+      lines.push('============================================================','房间：'+room.name+(room.note?'（'+room.note+'）':''));
+      const spaces=rs(room.id);
+      if(!spaces.length) lines.push('  暂无收纳空间');
+      spaces.forEach(function(space){
+        lines.push('','  收纳空间：'+space.name+(space.note?'（'+space.note+'）':''));
+        const items=si(space.id);
+        if(!items.length) lines.push('    暂无物品');
+        items.forEach(function(it,index){
+          lines.push('    '+(index+1)+'. '+it.name);
+          lines.push('       数量：'+it.qty);
+          if(it.expiry) lines.push('       保质期：'+it.expiry+(isExpired(it)?'（已过期）':''));
+          if(it.tags) lines.push('       标签：'+it.tags);
+          if(it.note) lines.push('       备注：'+it.note);
+        });
+      });
+      lines.push('');
+    });
+    const knownSpaces=new Set(D.spaces.map(function(s){return s.id;}));
+    const unplaced=D.items.filter(function(it){return !knownSpaces.has(it.spaceId);});
+    if(unplaced.length){
+      lines.push('============================================================','位置未知的物品');
+      unplaced.forEach(function(it,index){lines.push('  '+(index+1)+'. '+it.name+'  数量：'+it.qty+(it.note?'  备注：'+it.note:''));});
+      lines.push('');
+    }
+    return '\ufeff'+lines.join('\r\n');
+  }
+  window.getExportPayload=function(format){
+    const day=new Date().toISOString().slice(0,10);
+    if(format==='json'){
+      return {
+        text:HomeInventoryBackup.exportJson(D),
+        filename:'全屋收纳备份_'+day+'.json',
+        mimeType:'application/json;charset=utf-8',
+        extension:'.json',
+        label:'JSON'
+      };
+    }
+    return {
+      text:HomeInventoryBackup.exportTxt(D,exportText()),
+      filename:'全屋收纳清单_'+day+'.txt',
+      mimeType:'text/plain;charset=utf-8',
+      extension:'.txt',
+      label:'TXT'
+    };
+  };
+  window.getExportText=function(){ return window.getExportPayload('txt'); };
+  window.showExportOptions=function(){
+    document.getElementById('mod-t').textContent='选择导出格式';
+    document.getElementById('mod-b').innerHTML='<div class="form"><button class="btn-primary" onclick="closeMod();exportData(\'txt\')">导出 TXT（可阅读）</button><button class="btn-secondary" onclick="closeMod();exportData(\'json\')">导出 JSON（完整备份）</button><div style="font-size:13px;line-height:1.6;color:var(--text3)">TXT 可以直接查看，也能重新导入；JSON 适合完整备份和迁移。</div></div>';
+    document.getElementById('mod').classList.add('show');
+  };
+  window.exportData=async function(format){
+    const payload=window.getExportPayload(format==='json'?'json':'txt'),text=payload.text,filename=payload.filename;
+    try{
+      if(typeof window.showSaveFilePicker==='function'){
+        const accept={}; accept[payload.mimeType.split(';')[0]]=[payload.extension];
+        const handle=await window.showSaveFilePicker({suggestedName:filename,types:[{description:payload.label+' 备份文件',accept:accept}]});
+        const writable=await handle.createWritable();
+        await writable.write(text);
+        await writable.close();
+        alert(payload.label+' 文件导出成功！');
+        return;
+      }
+      const blob=new Blob([text],{type:payload.mimeType});
+      const a=document.createElement('a'),url=URL.createObjectURL(blob);
+      a.href=url; a.download=filename; document.body.appendChild(a); a.click(); a.remove();
+      setTimeout(function(){URL.revokeObjectURL(url);},1000);
+    }catch(e){
+      if(e&&e.name==='AbortError') return;
+      alert('导出失败：'+(e&&e.message?e.message:'无法写入备份文件'));
+    }
+  };
+  window.importData=function(el){
+    const f=el.files[0]; if(!f)return;
+    const r=new FileReader();
+    r.onload=function(e){
+      let d;
+      try{ d=HomeInventoryBackup.importBackup(e.target.result,f.name); }catch(err){ alert('导入失败：'+(err&&err.message?err.message:'文件格式错误')); return; }
+      normalize(d);
+      D=d; save(); document.getElementById('demo').style.display='none'; renderManage(); BS={v:'rooms',rid:null,sid:null}; alert((/\.txt$/i.test(f.name)?'TXT':'JSON')+' 导入成功！');
+    };
+    r.readAsText(f); el.value='';
+  };
+
+  load();
+})();
+</script>
+<script src="pwa-bridge.js"></script>
+<script src="mobile-bridge.js"></script>
+</body>
+</html>
