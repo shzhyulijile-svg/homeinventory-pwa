@@ -29,6 +29,22 @@
     window.XMLHttpRequest.__homeInventoryCredStrip = true;
   }
 
+  // SDK 默认把身份认证请求发到 {env}.api.tcloudbasegateway.com，
+  // 该网关对未在控制台登记的网页来源直接返回 403（不带跨域头），
+  // 浏览器拦截后表现为 "Load failed"。把 GATEWAY 端点改指到
+  // {env}.{region}.tcb-api.tencentcloudapi.com（认证 API 本机域名，
+  // 已实测对任意 Origin 放行 /auth/*），规避该限制。
+  function registerCloudBaseAuthEndPoint(app, config) {
+    if (!app || typeof app.registerEndPointWithKey !== 'function') return;
+    const env = config.env;
+    const region = config.region || 'ap-shanghai';
+    app.registerEndPointWithKey({
+      key: 'GATEWAY',
+      url: '//' + env + '.' + region + '.tcb-api.tencentcloudapi.com',
+      protocol: 'https:',
+    });
+  }
+
   function asError(error, fallback) {
     const message = error && error.message ? error.message : fallback;
     const wrapped = new Error(message || 'CloudBase 请求失败');
@@ -84,6 +100,7 @@
 
     installCloudBaseCredentialStrip();
     const app = cloudbase.init(config);
+    registerCloudBaseAuthEndPoint(app, config);
     const auth = getAuth(app);
     const db = app.database();
     let pendingRegistrationVerifier = null;
