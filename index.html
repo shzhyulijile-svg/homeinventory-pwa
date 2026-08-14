@@ -609,12 +609,20 @@
     return {email:email.trim(),password:password};
   }
 
+  function cloudErrorText(e){
+    let msg=(e&&e.message?e.message:'请稍后重试');
+    if(/load failed|failed to fetch|network ?error|the internet connection appears to be offline/i.test(msg)){
+      msg+='（这通常是网络层问题：请确认当前 WiFi/蜂窝网络能正常上网，如开着 VPN/梯子请先关闭再试；也可以打开 diag.html 页面做网络诊断）';
+    }
+    return msg;
+  }
+
   window.cloudLogin=async function(){
     try{
       const value=cloudCredentials();
       await cloudSync.login(value.email,value.password);
       window.showCloudSync();
-    }catch(e){alert('登录失败：'+(e&&e.message?e.message:'请稍后重试'));}
+    }catch(e){alert('登录失败：'+cloudErrorText(e));}
   };
 
   window.cloudRegister=async function(){
@@ -623,7 +631,7 @@
       await cloudSync.beginRegistration(value.email,value.password);
       document.getElementById('mod-t').textContent='输入邮箱验证码';
       document.getElementById('mod-b').innerHTML='<div class="form"><div class="cloud-status">验证码已发送到 '+esc(value.email)+'</div><div class="form-row"><label>6 位验证码</label><input id="cloud-code" inputmode="numeric" autocomplete="one-time-code" maxlength="6" placeholder="请输入验证码"></div><button class="btn-primary" onclick="cloudCompleteRegistration()">确认注册并同步</button><button class="btn-secondary" onclick="showCloudSync()">返回登录</button></div>';
-    }catch(e){alert('注册失败：'+(e&&e.message?e.message:'请稍后重试'));}
+    }catch(e){alert('注册失败：'+cloudErrorText(e));}
   };
 
   window.cloudCompleteRegistration=async function(){
@@ -632,12 +640,12 @@
       if(!/^\d{6}$/.test(code))throw new Error('请输入 6 位邮箱验证码');
       await cloudSync.completeRegistration(code);
       window.showCloudSync();
-    }catch(e){alert('验证码确认失败：'+(e&&e.message?e.message:'请稍后重试'));}
+    }catch(e){alert('验证码确认失败：'+cloudErrorText(e));}
   };
 
   window.cloudManualSync=async function(){
     try{await cloudSync.sync();window.showCloudSync();}
-    catch(e){alert('同步失败：'+(e&&e.message?e.message:'请稍后重试'));}
+    catch(e){alert('同步失败：'+cloudErrorText(e));}
   };
 
   window.cloudLogout=async function(){
