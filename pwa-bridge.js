@@ -56,7 +56,17 @@
   };
 
   window.addEventListener('load', () => {
-    if ('serviceWorker' in navigator) navigator.serviceWorker.register('./sw.js');
+    if ('serviceWorker' in navigator) {
+      // 记录本次加载是否由旧 SW 控制；之后新版 SW 接管时自动刷新一次，
+      // 确保用户马上运行最新代码，不再停留在旧缓存。
+      const hadController = Boolean(navigator.serviceWorker.controller);
+      navigator.serviceWorker.register('./sw.js');
+      if (hadController) {
+        navigator.serviceWorker.addEventListener('controllerchange', () => {
+          window.location.reload();
+        });
+      }
+    }
     showIOSInstallHint();
   });
 })();

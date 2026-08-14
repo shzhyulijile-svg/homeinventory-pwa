@@ -1,4 +1,4 @@
-const CACHE_NAME = 'homeinventory-pwa-v9-cloudsync';
+const CACHE_NAME = 'homeinventory-pwa-v10-cloudsync';
 const APP_SHELL = [
   './',
   './index.html',
