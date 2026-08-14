@@ -62,6 +62,21 @@
   .pwa-install-tip strong { font-size: 14px; font-weight: 600; }
   .pwa-install-tip span { font-size: 12px; line-height: 1.45; color: var(--text2); }
   .pwa-install-tip button { flex-shrink: 0; min-height: 36px; padding: 7px 10px; border: 1px solid var(--border); border-radius: 8px; background: var(--card); color: var(--accent); font: inherit; font-size: 13px; cursor: pointer; }
+  .account-entry { width: 100%; min-height: 62px; display: flex; align-items: center; gap: 12px; padding: 11px 14px; margin: 0 0 14px; border: 1px solid var(--border); border-radius: 12px; background: var(--card); color: var(--text); font: inherit; text-align: left; cursor: pointer; box-shadow: 0 1px 3px rgba(0,0,0,0.04); }
+  .account-entry:active { transform: scale(.995); background: rgba(128,128,128,0.06); }
+  .account-entry-icon { width: 38px; height: 38px; flex: 0 0 38px; display: inline-flex; align-items: center; justify-content: center; border-radius: 50%; background: rgba(0,122,255,0.1); font-size: 19px; }
+  .account-entry-copy { min-width: 0; flex: 1; display: flex; flex-direction: column; gap: 3px; }
+  .account-entry-copy strong { font-size: 15px; font-weight: 600; }
+  .account-entry-copy small { overflow: hidden; color: var(--text3); font-size: 12px; line-height: 1.35; text-overflow: ellipsis; white-space: nowrap; }
+  .account-entry-arrow { flex: 0 0 auto; color: var(--text3); font-size: 22px; line-height: 1; }
+  .account-entry[data-state="logged-in"] { border-color: rgba(52,199,89,0.32); }
+  .account-entry[data-state="logged-in"] .account-entry-icon { background: rgba(52,199,89,0.12); }
+  .account-entry[data-kind="error"], .account-entry[data-kind="conflict"] { border-color: rgba(255,59,48,0.32); }
+  #cloud-sync-button[data-kind="synced"] { color: var(--tag3); }
+  #cloud-sync-button[data-kind="syncing"], #cloud-sync-button[data-kind="pending"] { color: var(--accent); }
+  #cloud-sync-button[data-kind="conflict"], #cloud-sync-button[data-kind="error"] { color: var(--danger); }
+  .cloud-status { padding: 12px 14px; border-radius: 10px; background: rgba(0,122,255,0.08); color: var(--text2); font-size: 13px; line-height: 1.55; }
+  .cloud-help { color: var(--text3); font-size: 12px; line-height: 1.55; }
   .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.45); display: none; align-items: flex-end; justify-content: center; z-index: 100; backdrop-filter: blur(4px); }
   .modal-overlay.show { display: flex; }
   .modal { background: var(--card); border-radius: 20px 20px 0 0; width: 100%; max-width: 720px; max-height: 85vh; overflow: auto; padding: 20px; animation: slideUp .25s ease; }
@@ -105,6 +120,15 @@
   <p>录入每件物品的位置，秒速找到它</p>
 </div>
 
+<button class="account-entry" id="cloud-account-button" data-state="signed-out" data-kind="unconfigured" onclick="showCloudSync()" aria-label="未登录，点击登录或注册">
+  <span class="account-entry-icon" aria-hidden="true">👤</span>
+  <span class="account-entry-copy">
+    <strong id="cloud-account-title">未登录</strong>
+    <small id="cloud-account-detail">登录 / 注册后同步电脑和手机</small>
+  </span>
+  <span class="account-entry-arrow" aria-hidden="true">›</span>
+</button>
+
 <div class="tabs">
   <button class="tab active" data-tab="search" onclick="switchTab('search')">🔍 查找物品</button>
   <button class="tab" data-tab="browse" onclick="switchTab('browse')">📂 按空间浏览</button>
@@ -133,6 +157,7 @@
     <button onclick="showAddItem()">➕ 添加物品</button>
     <button onclick="showExportOptions()">📤 导出备份</button>
     <button onclick="document.getElementById('fimp').click()">📥 导入备份</button>
+    <button id="cloud-sync-button" data-kind="unconfigured" onclick="showCloudSync()">☁️ 云同步</button>
     <input type="file" id="fimp" style="display:none" accept=".txt,.json,text/plain,application/json" onchange="importData(this)">
   </div>
   <div class="section-title">房间列表</div>
@@ -153,12 +178,20 @@
   </div>
 </div>
 
+<script src="cloudbase-sdk.js"></script>
+<script src="cloudbase-config.js"></script>
+<script src="sync-core.js"></script>
+<script src="cloudbase-client.js"></script>
+<script src="cloud-sync-controller.js"></script>
 <script src="backup-format.js"></script>
 <script>
 (function(){
   const SK = 'home_inventory_v2';
+  const DEVICE_KEY = 'home_inventory_device_id';
   let D = {rooms:[],spaces:[],items:[]};
   let BS = {v:'rooms',rid:null,sid:null};
+  let cloudSync = null;
+  let cloudStatus = {kind:'unconfigured',message:'云同步尚未配置'};
 
   function load() {
     try {
@@ -172,7 +205,12 @@
       normalize(D);
     } catch(e){ D={rooms:[],spaces:[],items:[]}; }
   }
-  function save() { try { localStorage.setItem(SK, JSON.stringify(D)); } catch(e){ alert('保存失败：本地存储空间不足或被浏览器禁用'); } }
+  function save(options) {
+    try {
+      localStorage.setItem(SK, JSON.stringify(D));
+      if(!(options&&options.fromSync) && cloudSync) cloudSync.markLocalChange();
+    } catch(e){ alert('保存失败：本地存储空间不足或被浏览器禁用'); }
+  }
   function uid() { return Date.now().toString(36)+Math.random().toString(36).slice(2,5); }
   function normalize(d) {
     const idMap = Object.create(null);
@@ -233,7 +271,6 @@
       {id:'i14',spaceId:'s8',name:'护照',tags:'证件,重要',note:'有效期至2028',qty:1,expiry:'2028-06-15'},
       {id:'i15',spaceId:'s8',name:'房产证',tags:'证件,重要',note:'',qty:1,expiry:''}
     ];
-    save();
     document.getElementById('demo').style.display='block';
   }
 
@@ -396,6 +433,7 @@
   function refreshActive(){ const t=document.querySelector('.tab.active'); const tab=t?t.getAttribute('data-tab'):''; if(tab==='search') doSearch(); else if(tab==='browse') renderBrowse(); }
   window.delItem=function(id){ if(!confirm('确定删除该物品吗？'))return; D.items=D.items.filter(i=>i.id!==id); save(); renderManage(); refreshActive(); };
 
+  window.openMod=function(){ document.getElementById('mod').classList.add('show'); };
   window.closeMod=function(){ document.getElementById('mod').classList.remove('show'); };
 
   function exportText(){
@@ -488,7 +526,167 @@
     r.readAsText(f); el.value='';
   };
 
+  function getDeviceId(){
+    let id=localStorage.getItem(DEVICE_KEY);
+    if(id)return id;
+    const nativeAndroid=Boolean(window.Capacitor&&typeof window.Capacitor.isNativePlatform==='function'&&window.Capacitor.isNativePlatform());
+    id=(nativeAndroid?'android':'pwa')+'-'+uid()+uid();
+    localStorage.setItem(DEVICE_KEY,id);
+    return id;
+  }
+
+  function updateCloudStatus(status){
+    cloudStatus=status||{kind:'error',message:'同步状态未知'};
+    const button=document.getElementById('cloud-sync-button');
+    const labels={
+      unconfigured:'☁️ 云同步',
+      'signed-out':'☁️ 登录同步',
+      ready:'☁️ 准备同步',
+      syncing:'☁️ 同步中…',
+      verification:'✉️ 等待验证码',
+      pending:'☁️ 等待同步',
+      offline:'☁️ 离线待同步',
+      conflict:'⚠️ 同步冲突',
+      synced:'☁️ 已同步',
+      error:'⚠️ 同步失败'
+    };
+    if(button){
+      button.dataset.kind=cloudStatus.kind;
+      button.textContent=labels[cloudStatus.kind]||'☁️ 云同步';
+      button.title=cloudStatus.message||'';
+    }
+    refreshCloudAccount();
+  }
+
+  function cloudUserLabel(user){
+    if(!user)return '';
+    return String(user.email||user.name||user.id||user.uid||'已登录账号');
+  }
+
+  function refreshCloudAccount(){
+    const entry=document.getElementById('cloud-account-button');
+    const title=document.getElementById('cloud-account-title');
+    const detail=document.getElementById('cloud-account-detail');
+    if(!entry||!title||!detail)return;
+    let state=null;
+    try{state=cloudSync&&typeof cloudSync.getState==='function'?cloudSync.getState():null;}catch(_error){state=null;}
+    const user=state&&state.user;
+    entry.dataset.kind=cloudStatus.kind||'unconfigured';
+    if(user){
+      const account=cloudUserLabel(user);
+      entry.dataset.state='logged-in';
+      title.textContent='已登录';
+      detail.textContent=account;
+      entry.setAttribute('aria-label','已登录，账号 '+account+'，点击管理同步');
+      return;
+    }
+    entry.dataset.state='signed-out';
+    title.textContent='未登录';
+    detail.textContent=cloudStatus.kind==='verification'?'请查看邮箱并输入验证码':'登录 / 注册后同步电脑和手机';
+    entry.setAttribute('aria-label','未登录，点击登录或注册');
+  }
+
+  window.showCloudSync=function(){
+    document.getElementById('mod-t').textContent='云同步';
+    if(!cloudSync){
+      document.getElementById('mod-b').innerHTML='<div class="form"><div class="cloud-status">'+esc(cloudStatus.message||'云同步尚未配置')+'</div><div class="cloud-help">本地数据仍会正常保存。配置 CloudBase 环境后，电脑、Android App 和 iOS 网页版即可登录同一账号同步。</div></div>';
+      openMod(); return;
+    }
+    const state=cloudSync.getState();
+    if(state.user){
+      document.getElementById('mod-b').innerHTML='<div class="form"><div class="cloud-status"><strong>'+esc(cloudUserLabel(state.user))+'</strong><br>'+esc(cloudStatus.message||'已登录')+(state.dirty?'<br>本机有尚未上传的修改':'')+'</div><button class="btn-primary" onclick="cloudManualSync()">立即同步</button><button class="btn-secondary" onclick="cloudLogout()">退出账号</button><div class="cloud-help">三端必须登录同一邮箱账号。离线时修改会先保存在本机，联网后继续同步。</div></div>';
+      openMod(); return;
+    }
+    document.getElementById('mod-b').innerHTML='<div class="form"><div class="cloud-status">'+esc(cloudStatus.message||'请登录后同步')+'</div><div class="form-row"><label>邮箱</label><input id="cloud-email" type="email" autocomplete="email" placeholder="name@example.com"></div><div class="form-row"><label>密码</label><input id="cloud-password" type="password" autocomplete="current-password" minlength="8" placeholder="至少 8 位，包含字母和数字"></div><button class="btn-primary" onclick="cloudLogin()">登录并同步</button><button class="btn-secondary" onclick="cloudRegister()">首次使用：注册账号</button><div class="cloud-help">注册时验证码会发送到邮箱。密码不会保存在本软件中，由 CloudBase 负责验证。</div></div>';
+    openMod();
+  };
+
+  function cloudCredentials(){
+    const email=(document.getElementById('cloud-email')||{}).value||'';
+    const password=(document.getElementById('cloud-password')||{}).value||'';
+    if(!/^\S+@\S+\.\S+$/.test(email.trim()))throw new Error('请输入正确的邮箱地址');
+    if(password.length<8)throw new Error('密码至少需要 8 位');
+    return {email:email.trim(),password:password};
+  }
+
+  window.cloudLogin=async function(){
+    try{
+      const value=cloudCredentials();
+      await cloudSync.login(value.email,value.password);
+      window.showCloudSync();
+    }catch(e){alert('登录失败：'+(e&&e.message?e.message:'请稍后重试'));}
+  };
+
+  window.cloudRegister=async function(){
+    try{
+      const value=cloudCredentials();
+      await cloudSync.beginRegistration(value.email,value.password);
+      document.getElementById('mod-t').textContent='输入邮箱验证码';
+      document.getElementById('mod-b').innerHTML='<div class="form"><div class="cloud-status">验证码已发送到 '+esc(value.email)+'</div><div class="form-row"><label>6 位验证码</label><input id="cloud-code" inputmode="numeric" autocomplete="one-time-code" maxlength="6" placeholder="请输入验证码"></div><button class="btn-primary" onclick="cloudCompleteRegistration()">确认注册并同步</button><button class="btn-secondary" onclick="showCloudSync()">返回登录</button></div>';
+    }catch(e){alert('注册失败：'+(e&&e.message?e.message:'请稍后重试'));}
+  };
+
+  window.cloudCompleteRegistration=async function(){
+    try{
+      const code=((document.getElementById('cloud-code')||{}).value||'').trim();
+      if(!/^\d{6}$/.test(code))throw new Error('请输入 6 位邮箱验证码');
+      await cloudSync.completeRegistration(code);
+      window.showCloudSync();
+    }catch(e){alert('验证码确认失败：'+(e&&e.message?e.message:'请稍后重试'));}
+  };
+
+  window.cloudManualSync=async function(){
+    try{await cloudSync.sync();window.showCloudSync();}
+    catch(e){alert('同步失败：'+(e&&e.message?e.message:'请稍后重试'));}
+  };
+
+  window.cloudLogout=async function(){
+    try{await cloudSync.logout();closeMod();window.showCloudSync();}
+    catch(e){alert('退出失败：'+(e&&e.message?e.message:'请稍后重试'));}
+  };
+
+  window.cloudResolveConflict=async function(choice){
+    try{await cloudSync.resolveConflict(choice);closeMod();renderManage();}
+    catch(e){alert('处理冲突失败：'+(e&&e.message?e.message:'请重新同步'));}
+  };
+
+  function showCloudConflict(conflictInfo){
+    const remote=conflictInfo&&conflictInfo.remote;
+    document.getElementById('mod-t').textContent='发现同步冲突';
+    document.getElementById('mod-b').innerHTML='<div class="form"><div class="cloud-status">电脑和手机在上次同步后都修改了数据。为了避免丢失，请选择保留哪一份。</div><button class="btn-primary" onclick="cloudResolveConflict(\'local\')">保留本机版本并上传</button><button class="btn-secondary" onclick="cloudResolveConflict(\'remote\')">使用云端版本</button><div class="cloud-help">云端版本时间：'+esc(remote&&remote.updatedAt?new Date(remote.updatedAt).toLocaleString('zh-CN'):'未知')+'。操作前也可以先取消并导出 TXT/JSON 备份。</div></div>';
+    openMod();
+  }
+
+  function initCloudSync(){
+    const config=window.HomeInventoryCloudConfig||{};
+    if(!config.env||!config.accessKey){
+      updateCloudStatus({kind:'unconfigured',message:'云同步测试环境尚未配置，本地功能不受影响'});
+      return;
+    }
+    try{
+      const client=HomeInventoryCloudBaseClient.createCloudBaseClient({cloudbase:window.CloudBaseSDK,config:config});
+      cloudSync=HomeInventoryCloudSyncController.createSyncController({
+        client:client,
+        core:HomeInventorySyncCore,
+        storage:localStorage,
+        readData:function(){return D;},
+        writeData:function(data){D=data;normalize(D);save({fromSync:true});document.getElementById('demo').style.display='none';renderManage();doSearch();},
+        hasLocalData:function(){return localStorage.getItem(SK)!==null;},
+        deviceId:getDeviceId(),
+        isOnline:function(){return navigator.onLine!==false;},
+        onStatus:updateCloudStatus,
+        onConflict:showCloudConflict
+      });
+      cloudSync.initialize();
+      window.addEventListener('online',function(){cloudSync.sync().catch(function(){});});
+      document.addEventListener('visibilitychange',function(){if(document.visibilityState==='visible')cloudSync.sync().catch(function(){});});
+    }catch(e){
+      updateCloudStatus({kind:'error',message:'云同步初始化失败：'+(e&&e.message?e.message:'未知错误')});
+    }
+  }
+
   load();
+  initCloudSync();
 })();
 </script>
 <script src="pwa-bridge.js"></script>

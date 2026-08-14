@@ -1,9 +1,14 @@
-const CACHE_NAME = 'homeinventory-pwa-v2';
+const CACHE_NAME = 'homeinventory-pwa-v5-cloudsync';
 const APP_SHELL = [
   './',
   './index.html',
   './manifest.webmanifest',
   './backup-format.js',
+  './cloudbase-sdk.js',
+  './cloudbase-config.js',
+  './sync-core.js',
+  './cloudbase-client.js',
+  './cloud-sync-controller.js',
   './pwa-bridge.js',
   './mobile-bridge.js',
   './icons/icon-192.png',
@@ -28,6 +33,12 @@ self.addEventListener('activate', (event) => {
 self.addEventListener('fetch', (event) => {
   const { request } = event;
   if (request.method !== 'GET') return;
+  const requestUrl = new URL(request.url);
+
+  if (requestUrl.origin !== self.location.origin) {
+    event.respondWith(fetch(request));
+    return;
+  }
 
   if (request.mode === 'navigate') {
     event.respondWith(
