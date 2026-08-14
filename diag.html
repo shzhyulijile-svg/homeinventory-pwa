@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>云同步诊断</title>
+<style>
+  body { font-family: -apple-system, "PingFang SC", sans-serif; margin: 16px; background:#f6f6f6; color:#222; }
+  h1 { font-size: 20px; }
+  .card { background:#fff; border-radius:10px; padding:14px; margin:12px 0; box-shadow:0 1px 3px rgba(0,0,0,.08); }
+  .ok { color:#0a7d2c; font-weight:600; }
+  .bad { color:#c0392b; font-weight:600; }
+  pre { white-space:pre-wrap; word-break:break-all; font-size:12px; background:#f0f0f0; padding:8px; border-radius:6px; max-height:220px; overflow:auto; }
+  button { font-size:17px; padding:12px; width:100%; border:0; border-radius:10px; background:#111; color:#fff; }
+  .ver { color:#999; font-size:12px; }
+</style>
+</head>
+<body>
+<h1>云同步诊断 <span class="ver">diag-v1</span></h1>
+<div class="card" id="env"></div>
+<div class="card"><button id="run">开始诊断</button></div>
+<div class="card" id="results">尚未运行</div>
+<script>
+var HOST = 'https://myfirst-test-d8ge3c40585d511d4.ap-shanghai.tcb-api.tencentcloudapi.com';
+document.getElementById('env').innerHTML =
+  '<div>页面来源 Origin：<b>' + location.origin + '</b></div>' +
+  '<div>online：' + navigator.onLine + '</div>' +
+  '<div class="ver">' + navigator.userAgent + '</div>';
+
+function row(name, ok, detail) {
+  return '<div style="margin:10px 0"><span class="' + (ok ? 'ok' : 'bad') + '">' +
+    (ok ? '✓ ' : '✗ ') + name + '</span>' + (detail ? '<pre>' + detail + '</pre>' : '') + '</div>';
+}
+
+async function test(name, fn) {
+  try {
+    var detail = await fn();
+    return row(name, true, detail);
+  } catch (e) {
+    var info = '错误名称: ' + (e && e.name) + '\n错误信息: ' + (e && e.message);
+    if (e && e.cause) info += '\ncause: ' + String(e.cause);
+    return row(name, false, info);
+  }
+}
+
+document.getElementById('run').addEventListener('click', async function () {
+  var out = [];
+  this.disabled = true; this.textContent = '诊断中…';
+
+  out.push(await test('1. 能连上 CloudBase 服务器（GET 根路径）', async function () {
+    var r = await fetch(HOST + '/', { method: 'GET', cache: 'no-store' });
+    return 'HTTP ' + r.status;
+  }));
+
+  out.push(await test('2. 注册验证码接口有响应（无效邮箱，应返回结构化错误）', async function () {
+    var r = await fetch(HOST + '/auth/v1/verification', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email: 'not-an-email', action: 'signup' }),
+      cache: 'no-store'
+    });
+    var t = await r.text();
+    return 'HTTP ' + r.status + '\n' + t.slice(0, 400);
+  }));
+
+  out.push(await test('3. 带凭证请求（与 SDK 注册方式一致）', async function () {
+    var r = await fetch(HOST + '/auth/v1/verification', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email: 'not-an-email', action: 'signup' }),
+      credentials: 'include',
+      cache: 'no-store'
+    });
+    return 'HTTP ' + r.status;
+  }));
+
+  document.getElementById('results').innerHTML = out.join('');
+  this.disabled = false; this.textContent = '重新诊断';
+});
+</script>
+</body>
+</html>
