@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>云同步诊断 v3</title>
+<title>云同步诊断 v4</title>
 <style>
   body { font-family: -apple-system, "PingFang SC", sans-serif; margin: 16px; background:#f6f6f6; color:#222; }
   h1 { font-size: 20px; }
@@ -12,19 +12,39 @@
   .bad { color:#c0392b; font-weight:600; }
   pre { white-space:pre-wrap; word-break:break-all; font-size:12px; background:#f0f0f0; padding:8px; border-radius:6px; max-height:260px; overflow:auto; }
   button { font-size:17px; padding:12px; width:100%; border:0; border-radius:10px; background:#111; color:#fff; margin-top:8px; }
+  input { font-size:16px; padding:10px; width:100%; box-sizing:border-box; margin:6px 0; border:1px solid #ccc; border-radius:8px; }
   .ver { color:#999; font-size:12px; }
 </style>
 </head>
 <body>
-<h1>云同步诊断 <span class="ver">diag-v3</span></h1>
+<h1>云同步诊断 <span class="ver">diag-v4</span></h1>
 <div class="card" id="env"></div>
+
 <div class="card">
-  <button id="runA">测试 A：按 App 原样调用注册（带凭证）</button>
-  <button id="runB">测试 B：同样注册，但强制不带凭证</button>
+  <div><b>测试 A：裸 fetch 请求登录接口（不带凭证）</b></div>
+  <div class="ver">预期：任何设备都成功（服务器返回结构化业务错误即算通）。</div>
+  <button id="runA">运行测试 A</button>
 </div>
-<div class="card" id="results">说明：两个测试都会用真实 SDK 调用注册接口（邮箱用不存在的 diag 地址，不会打扰任何人）。<b>请先把本页「添加到主屏幕」，从主屏幕图标打开后再测试</b>，这样才和出问题的 App 环境完全一致。在 Safari 里也可以先跑一次做对照。</div>
+
+<div class="card">
+  <div><b>测试 B：裸 fetch 请求登录接口（带凭证 credentials:'include'）</b></div>
+  <div class="ver">预期：桌面浏览器成功；iOS 主屏幕 PWA 下若失败（Load failed），即复现平台层问题，证明必须剥离凭证。</div>
+  <button id="runB">运行测试 B</button>
+</div>
+
+<div class="card">
+  <div><b>测试 C：真实账号登录（验收测试，走 App 同款完整链路）</b></div>
+  <div class="ver">用你已注册的邮箱和密码。成功会显示用户 ID —— 这就代表 iPhone 登录已经修复。</div>
+  <input id="email" type="email" placeholder="邮箱" autocomplete="username">
+  <input id="password" type="password" placeholder="密码" autocomplete="current-password">
+  <button id="runC">登录</button>
+</div>
+
+<div class="card" id="results">建议先「添加到主屏幕」、从主屏幕图标打开本页再测，与 App 环境完全一致；Safari 标签页里也可先跑一遍做对照。</div>
+
 <script src="cloudbase-config.js"></script>
 <script src="cloudbase-sdk.js"></script>
+<script src="cloudbase-client.js"></script>
 <script>
 document.getElementById('env').innerHTML =
   '<div>页面来源 Origin：<b>' + location.origin + '</b></div>' +
@@ -32,71 +52,74 @@ document.getElementById('env').innerHTML =
   '<div>online：' + navigator.onLine + '</div>' +
   '<div class="ver">' + navigator.userAgent + '</div>';
 
-var xhrLog = [];
-(function instrument(){
-  var origOpen = XMLHttpRequest.prototype.open;
-  var origSend = XMLHttpRequest.prototype.send;
-  XMLHttpRequest.prototype.open = function(m, u){
-    this.__diag = { method: m, url: String(u) };
-    xhrLog.push('XHR ' + m + ' ' + u);
-    return origOpen.apply(this, arguments);
-  };
-  XMLHttpRequest.prototype.send = function(){
-    var d = this.__diag || {};
-    var self = this;
-    xhrLog.push('  → withCredentials=' + self.withCredentials);
-    this.addEventListener('error', function(){ xhrLog.push('  ✗ XHR error (NetworkError): ' + d.method + ' ' + d.url); });
-    this.addEventListener('load', function(){ xhrLog.push('  ✓ HTTP ' + self.status + ': ' + d.method + ' ' + d.url); });
-    return origSend.apply(this, arguments);
-  };
-})();
-
-function stripCredentialsForTcb() {
-  var origOpen = XMLHttpRequest.prototype.open;
-  var proto = XMLHttpRequest.prototype;
-  var desc = Object.getOwnPropertyDescriptor(proto, 'withCredentials');
-  if (!desc || !desc.set) return '（无法挂钩 withCredentials 属性）';
-  proto.open = function(m, u){ this.__stripCred = String(u).indexOf('tcb-api.tencentcloudapi.com') >= 0; return origOpen.apply(this, arguments); };
-  Object.defineProperty(proto, 'withCredentials', {
-    configurable: true,
-    get: desc.get,
-    set: function(v){ desc.set.call(this, this.__stripCred ? false : v); }
-  });
-  return '已强制 tcb-api 请求 withCredentials=false';
-}
-
 function row(name, ok, detail) {
   return '<div style="margin:10px 0"><span class="' + (ok ? 'ok' : 'bad') + '">' +
     (ok ? '✓ ' : '✗ ') + name + '</span>' + (detail ? '<pre>' + detail + '</pre>' : '') + '</div>';
 }
 
-async function signUpAttempt(label) {
-  xhrLog = [];
-  var app = cloudbase.init(window.HomeInventoryCloudConfig);
-  var auth = (app.auth && typeof app.auth.signUp === 'function') ? app.auth : app.auth({ persistence: 'local' });
+function authUrl() {
+  var c = window.HomeInventoryCloudConfig;
+  return 'https://' + c.env + '.' + (c.region || 'ap-shanghai') + '.tcb-api.tencentcloudapi.com/auth/v1/signin';
+}
+
+async function rawProbe(credentialsMode) {
+  var url = authUrl();
   try {
-    var r = await auth.signUp({ email: 'diag-probe-' + Date.now() + '@example.com', password: 'Diag12345abc' });
-    return row(label, true, '注册请求被服务器正常受理（返回了结构化响应）\n' + JSON.stringify(r && Object.keys(r)) + '\n\n请求日志:\n' + xhrLog.join('\n'));
+    var resp = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({}),
+      credentials: credentialsMode
+    });
+    var text = await resp.text();
+    // 任何 HTTP 状态都说明网络通了（400 只是参数错误）
+    return { ok: true, detail: 'HTTP ' + resp.status + '\n' + text.slice(0, 400) };
   } catch (e) {
-    var msg = (e && e.message) || String(e);
-    // 结构化业务错误（如邮箱/密码规则）也说明网络是通的
-    var business = e && (e.code || /invalid|argument|password|email|验证|规则/i.test(msg)) && !/load failed|failed to fetch/i.test(msg);
-    return row(label, business, '错误名称: ' + (e && e.name) + '\n错误信息: ' + msg + (e && e.code ? '\ncode: ' + e.code : '') + '\n\n请求日志:\n' + xhrLog.join('\n'));
+    return { ok: false, detail: '错误名称: ' + (e && e.name) + '\n错误信息: ' + ((e && e.message) || String(e)) };
   }
 }
 
-document.getElementById('runA').addEventListener('click', async function(){
+document.getElementById('runA').addEventListener('click', async function () {
   this.disabled = true; this.textContent = '测试 A 进行中…';
-  document.getElementById('results').innerHTML = await signUpAttempt('测试 A：SDK 原样注册');
-  this.disabled = false; this.textContent = '测试 A：按 App 原样调用注册（带凭证）';
+  var r = await rawProbe('omit');
+  document.getElementById('results').innerHTML = row('测试 A：无凭证请求', r.ok, r.detail);
+  this.disabled = false; this.textContent = '运行测试 A';
 });
 
-document.getElementById('runB').addEventListener('click', async function(){
+document.getElementById('runB').addEventListener('click', async function () {
   this.disabled = true; this.textContent = '测试 B 进行中…';
-  var note = stripCredentialsForTcb();
-  var r = await signUpAttempt('测试 B：不带凭证注册');
-  document.getElementById('results').innerHTML = row('凭证剥离挂钩', true, note) + r;
-  this.disabled = false; this.textContent = '测试 B：同样注册，但强制不带凭证';
+  var r = await rawProbe('include');
+  document.getElementById('results').innerHTML = row('测试 B：带凭证请求（iOS PWA 下失败属预期）', r.ok, r.detail);
+  this.disabled = false; this.textContent = '运行测试 B';
+});
+
+document.getElementById('runC').addEventListener('click', async function () {
+  this.disabled = true; this.textContent = '登录中…';
+  var email = document.getElementById('email').value.trim();
+  var password = document.getElementById('password').value;
+  try {
+    var client = window.HomeInventoryCloudBaseClient.createCloudBaseClient({
+      cloudbase: window.cloudbase || window.CloudBaseSDK || window.TcbCore,
+      config: window.HomeInventoryCloudConfig
+    });
+    var result = await client.signIn(email, password);
+    var user = result && result.user;
+    var uid = user && (user.id || user.uid || user.sub || user._id);
+    document.getElementById('results').innerHTML = row(
+      '测试 C：真实账号登录', true,
+      '登录成功！用户 ID: ' + (uid || '(已登录，未返回ID)') + '\n\n可以回到主页使用「登录并同步」了。'
+    );
+  } catch (e) {
+    var msg = (e && e.message) || String(e);
+    var network = /load failed|failed to fetch|network|FetchEvent/i.test(msg);
+    document.getElementById('results').innerHTML = row(
+      '测试 C：真实账号登录', false,
+      '错误信息: ' + msg + (e && e.code ? '\ncode: ' + e.code : '') +
+      (network ? '\n\n仍是网络层失败：请确认已部署 v11 补丁（sw.js + cloudbase-client.js），并清除了旧 ServiceWorker/网站数据。'
+               : '\n\n网络层已通，这是业务层错误（如密码错误、账号状态等），按提示处理即可。')
+    );
+  }
+  this.disabled = false; this.textContent = '登录';
 });
 </script>
 </body>

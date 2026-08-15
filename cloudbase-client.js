@@ -7,10 +7,42 @@
 
   const COLLECTION = 'home_inventory_snapshots';
 
-  // iOS 主屏幕 PWA（独立窗口）对带凭证的跨域 XHR 会直接报 "Load failed"，
+  // iOS 主屏幕 PWA（独立窗口）对带凭证的跨域请求会直接报 "Load failed"，
   // 而 CloudBase 邮箱登录流程不依赖 cookie（令牌在请求体/header 里），
-  // 因此对 CloudBase API 域名强制关闭 withCredentials。
-  function installCloudBaseCredentialStrip() {
+  // 因此对 CloudBase API 域名强制关闭凭证携带。
+  //
+  // v11 修复：SDK 认证模块的底层传输是 window.fetch（v10 只挂钩了 XHR，
+  // 所以补丁没生效）。这里同时挂钩 fetch 与 XHR，把 tcb 域名的
+  // credentials 统一强制为 'omit' / withCredentials=false。
+  function isCloudBaseApiUrl(url) {
+    return typeof url === 'string' && (
+      url.indexOf('tcb-api.tencentcloudapi.com') >= 0 ||
+      url.indexOf('tcloudbasegateway.com') >= 0 ||
+      url.indexOf('tcb.qcloud.la') >= 0
+    );
+  }
+
+  function installFetchCredentialStrip() {
+    if (typeof window === 'undefined' || typeof window.fetch !== 'function') return;
+    if (window.fetch.__homeInventoryCredStrip) return;
+    const origFetch = window.fetch;
+    const wrapped = function (input, init) {
+      try {
+        const url = typeof input === 'string' ? input : (input && input.url) || '';
+        if (isCloudBaseApiUrl(url)) {
+          init = Object.assign({}, init, { credentials: 'omit' });
+          if (typeof Request === 'function' && input instanceof Request && input.credentials !== 'omit') {
+            input = new Request(input, { credentials: 'omit' });
+          }
+        }
+      } catch (_) { /* 兜底：任何异常都不影响原始请求 */ }
+      return origFetch.call(this, input, init);
+    };
+    wrapped.__homeInventoryCredStrip = true;
+    window.fetch = wrapped;
+  }
+
+  function installXhrCredentialStrip() {
     if (typeof window === 'undefined' || typeof window.XMLHttpRequest !== 'function') return;
     if (window.XMLHttpRequest.__homeInventoryCredStrip) return;
     const proto = window.XMLHttpRequest.prototype;
@@ -18,7 +50,7 @@
     if (!desc || !desc.set || !desc.configurable) return;
     const origOpen = proto.open;
     proto.open = function (method, url) {
-      this.__homeInventoryStripCred = typeof url === 'string' && url.indexOf('tcb-api.tencentcloudapi.com') >= 0;
+      this.__homeInventoryStripCred = isCloudBaseApiUrl(url);
       return origOpen.apply(this, arguments);
     };
     Object.defineProperty(proto, 'withCredentials', {
@@ -27,6 +59,11 @@
       set: function (value) { desc.set.call(this, this.__homeInventoryStripCred ? false : value); },
     });
     window.XMLHttpRequest.__homeInventoryCredStrip = true;
+  }
+
+  function installCloudBaseCredentialStrip() {
+    installFetchCredentialStrip();
+    installXhrCredentialStrip();
   }
 
   // SDK 默认把身份认证请求发到 {env}.api.tcloudbasegateway.com，
