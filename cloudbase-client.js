@@ -14,12 +14,22 @@
   // v11 修复：SDK 认证模块的底层传输是 window.fetch（v10 只挂钩了 XHR，
   // 所以补丁没生效）。这里同时挂钩 fetch 与 XHR，把 tcb 域名的
   // credentials 统一强制为 'omit' / withCredentials=false。
+  //
+  // v12 修复：GATEWAY 端点改指 tcb-api 域名后，SDK 拼数据库 REST 地址时
+  // 直接用该端点源 + /database/...，漏掉了 /web 前缀（tcb-api 的数据库 REST
+  // 挂在 /web/database/... 下），导致同步请求 404、浏览器报 Load failed。
+  // 这里把发往 tcb-api 的 /database/ 请求统一补回 /web 前缀。
   function isCloudBaseApiUrl(url) {
     return typeof url === 'string' && (
       url.indexOf('tcb-api.tencentcloudapi.com') >= 0 ||
       url.indexOf('tcloudbasegateway.com') >= 0 ||
       url.indexOf('tcb.qcloud.la') >= 0
     );
+  }
+
+  function fixCloudBaseDbRestUrl(url) {
+    if (typeof url !== 'string') return url;
+    return url.replace(/^(https?:\/\/[^/?#]*tcb-api\.tencentcloudapi\.com)\/database\//, '$1/web/database/');
   }
 
   function installFetchCredentialStrip() {
@@ -31,8 +41,12 @@
         const url = typeof input === 'string' ? input : (input && input.url) || '';
         if (isCloudBaseApiUrl(url)) {
           init = Object.assign({}, init, { credentials: 'omit' });
-          if (typeof Request === 'function' && input instanceof Request && input.credentials !== 'omit') {
-            input = new Request(input, { credentials: 'omit' });
+          const fixedUrl = fixCloudBaseDbRestUrl(url);
+          if (typeof input === 'string') {
+            input = fixedUrl;
+          } else if (typeof Request === 'function' && input instanceof Request && (input.credentials !== 'omit' || fixedUrl !== url)) {
+            const stripped = input.credentials !== 'omit' ? new Request(input, { credentials: 'omit' }) : input;
+            input = fixedUrl !== url ? new Request(fixedUrl, stripped) : stripped;
           }
         }
       } catch (_) { /* 兜底：任何异常都不影响原始请求 */ }
@@ -50,7 +64,9 @@
     if (!desc || !desc.set || !desc.configurable) return;
     const origOpen = proto.open;
     proto.open = function (method, url) {
-      this.__homeInventoryStripCred = isCloudBaseApiUrl(url);
+      const fixed = fixCloudBaseDbRestUrl(typeof url === 'string' ? url : url);
+      this.__homeInventoryStripCred = isCloudBaseApiUrl(fixed);
+      if (fixed !== url) return origOpen.call(this, method, fixed);
       return origOpen.apply(this, arguments);
     };
     Object.defineProperty(proto, 'withCredentials', {
