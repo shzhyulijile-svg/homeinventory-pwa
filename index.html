@@ -587,7 +587,7 @@
   }
 
   window.showCloudSync=function(){
-    document.getElementById('mod-t').textContent='云同步 v15';
+    document.getElementById('mod-t').textContent='云同步 v16';
     if(!cloudSync){
       document.getElementById('mod-b').innerHTML='<div class="form"><div class="cloud-status">'+esc(cloudStatus.message||'云同步尚未配置')+'</div><div class="cloud-help">本地数据仍会正常保存。配置 CloudBase 环境后，电脑、Android App 和 iOS 网页版即可登录同一账号同步。</div></div>';
       openMod(); return;
@@ -611,6 +611,11 @@
 
   function cloudErrorText(e){
     let msg=(e&&e.message?e.message:'请稍后重试');
+    // v16 诊断：附带错误类型/堆栈/UA，便于定位仅真机出现的问题
+    try{
+      const diag='\n——诊断信息（截图发我）——\nname='+(e&&e.name||'?')+'\ncode='+(e&&e.code||'-')+'\nstack='+((e&&e.stack?String(e.stack):'').split('\n').slice(0,4).join(' | ').slice(0,400)||'-')+'\nua='+navigator.userAgent;
+      msg+=diag;
+    }catch(_){/* 忽略诊断自身异常 */}
     if(/load failed|failed to fetch|network ?error|the internet connection appears to be offline/i.test(msg)){
       if(/(^|\.)github\.io$/.test(location.hostname)){
         msg='GitHub 版受云平台免费套餐限制（无法把 github.io 加入安全域名白名单），只能登录、不能同步。请改用腾讯托管网址：https://myfirst-test-d8ge3c40585d511d4-1427393886.tcloudbaseapp.com （首次打开会有"风险提醒"页，点确定即可），那边登录同一邮箱即可正常同步。';
@@ -634,7 +639,7 @@
       const value=cloudCredentials();
       await cloudSync.beginRegistration(value.email,value.password);
       document.getElementById('mod-t').textContent='输入邮箱验证码';
-      document.getElementById('mod-b').innerHTML='<div class="form"><div class="cloud-status">验证码已发送到 '+esc(value.email)+'</div><div class="form-row"><label>6 位验证码</label><input id="cloud-code" inputmode="numeric" autocomplete="one-time-code" maxlength="6" placeholder="请输入验证码"></div><button class="btn-primary" onclick="cloudCompleteRegistration()">确认注册并同步</button><button class="btn-secondary" onclick="showCloudSync()">返回登录</button></div>';
+      document.getElementById('mod-b').innerHTML='<div class="form"><div class="cloud-status">验证码已发送到 '+esc(value.email)+'（5 分钟内有效；若重复发送，以最新一封邮件为准）</div><div class="form-row"><label>6 位验证码</label><input id="cloud-code" inputmode="numeric" autocomplete="one-time-code" maxlength="6" placeholder="请输入验证码"></div><button class="btn-primary" onclick="cloudCompleteRegistration()">确认注册并同步</button><button class="btn-secondary" onclick="showCloudSync()">返回登录</button></div>';
     }catch(e){alert('注册失败：'+cloudErrorText(e));}
   };
 
