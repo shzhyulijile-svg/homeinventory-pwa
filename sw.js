@@ -10,7 +10,7 @@
 //    （iOS 16.4/17 的 Cache API 会随机抛 "Internal error"，见 WebKit bug 261767）。
 // 3. 缓存读取一律用 caches.open().then(cache => cache.match())，
 //    不用 caches.match()（WebKit 工程师给出的规避方式）。
-const CACHE_NAME = 'homeinventory-pwa-v14-cloudsync';
+const CACHE_NAME = 'homeinventory-pwa-v15-cloudsync';
 const APP_SHELL = [
   './',
   './index.html',

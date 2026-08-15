@@ -94,12 +94,17 @@
   //   浏览器一律拦截 → 同步报 "Load failed"。
   // 因此按页面来源分流：腾讯托管版回走官方网关（登录+数据库全通）；
   // 其他来源（GitHub Pages 等）维持 tcb-api，至少保证登录可用。
+  // v15：静态托管默认域名（tcloudbaseapp.com）的 CDN 对不发 Sec-Fetch 头的
+  // 浏览器（Safari 全系，含 iPhone）一律回 content-disposition: attachment，
+  // 页面变成下载而无法打开。故把站点改由 HTTP 访问服务域名
+  // （*.app.tcloudbase.com，已在安全域名白名单）+ 云函数回源提供服务，
+  // 该域名同样走官方网关。
   function registerCloudBaseAuthEndPoint(app, config) {
     if (!app || typeof app.registerEndPointWithKey !== 'function') return;
     const env = config.env;
     const region = config.region || 'ap-shanghai';
     const host = (typeof location !== 'undefined' && location.hostname) || '';
-    const onTencentHosting = host.endsWith('.tcloudbaseapp.com');
+    const onTencentHosting = host.endsWith('.tcloudbaseapp.com') || host.endsWith('.app.tcloudbase.com');
     app.registerEndPointWithKey({
       key: 'GATEWAY',
       url: onTencentHosting
