@@ -77,9 +77,70 @@
     window.XMLHttpRequest.__homeInventoryCredStrip = true;
   }
 
+  // v17 诊断陷阱：老版 WebKit（如 iPhone 6s / iOS 15.2）对部分字符串参数会抛
+  // DOMException SyntaxError(code=12) "The string did not match the expected pattern."
+  // 且不携带 JS 堆栈，无法定位。这里包裹 fetch / XHR.open / new URL / WebSocket，
+  // 一旦捕获该错误，改写为带原始入参的新 Error 再抛出，弹窗诊断信息即可显示
+  // 到底是哪个字符串触发的。
+  function installSyntaxErrorTrap() {
+    if (typeof window === 'undefined') return;
+    if (window.__homeInventorySyntaxTrap) return;
+    window.__homeInventorySyntaxTrap = true;
+    const isSyntax = (e) => e && e.name === 'SyntaxError' && (e.code === 12 || /pattern/i.test(e.message || ''));
+    const annotate = (kind, arg) => new Error(kind + ' 收到非法字符串→ ' + String(arg).slice(0, 200));
+
+    if (typeof window.fetch === 'function') {
+      const of = window.fetch;
+      const wf = function (input, init) {
+        const desc = typeof input === 'string' ? input : (input && input.url) || '(非字符串入参)';
+        let p;
+        try { p = of.apply(this, arguments); } catch (e) { if (isSyntax(e)) throw annotate('fetch', desc); throw e; }
+        return Promise.resolve(p).catch((e) => { if (isSyntax(e)) throw annotate('fetch', desc); throw e; });
+      };
+      if (of.__homeInventoryCredStrip) wf.__homeInventoryCredStrip = true;
+      window.fetch = wf;
+    }
+
+    const xp = window.XMLHttpRequest && window.XMLHttpRequest.prototype;
+    if (xp && typeof xp.open === 'function') {
+      const oo = xp.open;
+      xp.open = function (method, url) {
+        try { return oo.apply(this, arguments); }
+        catch (e) { if (isSyntax(e)) throw annotate('xhr.open', method + ' ' + url); throw e; }
+      };
+    }
+
+    if (typeof window.URL === 'function') {
+      const OU = window.URL;
+      const WU = function (url, base) {
+        try { return new OU(url, base); }
+        catch (e) { if (isSyntax(e)) throw annotate('new URL', String(url) + ' | base=' + String(base)); throw e; }
+      };
+      WU.prototype = OU.prototype;
+      Object.getOwnPropertyNames(OU).forEach((k) => {
+        if (['length', 'name', 'prototype'].indexOf(k) < 0) {
+          try { Object.defineProperty(WU, k, Object.getOwnPropertyDescriptor(OU, k)); } catch (_) { /* 忽略 */ }
+        }
+      });
+      window.URL = WU;
+    }
+
+    if (typeof window.WebSocket === 'function') {
+      const OW = window.WebSocket;
+      const WW = function (url, protocols) {
+        try { return protocols === undefined ? new OW(url) : new OW(url, protocols); }
+        catch (e) { if (isSyntax(e)) throw annotate('WebSocket', url); throw e; }
+      };
+      WW.prototype = OW.prototype;
+      ['CONNECTING', 'OPEN', 'CLOSING', 'CLOSED'].forEach((k) => { WW[k] = OW[k]; });
+      window.WebSocket = WW;
+    }
+  }
+
   function installCloudBaseCredentialStrip() {
     installFetchCredentialStrip();
     installXhrCredentialStrip();
+    installSyntaxErrorTrap();
   }
 
   // v13 修复（同步 Load failed 的完整根因）：
