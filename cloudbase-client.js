@@ -82,18 +82,29 @@
     installXhrCredentialStrip();
   }
 
-  // SDK 默认把身份认证请求发到 {env}.api.tcloudbasegateway.com，
-  // 该网关对未在控制台登记的网页来源直接返回 403（不带跨域头），
-  // 浏览器拦截后表现为 "Load failed"。把 GATEWAY 端点改指到
-  // {env}.{region}.tcb-api.tencentcloudapi.com（认证 API 本机域名，
-  // 已实测对任意 Origin 放行 /auth/*），规避该限制。
+  // v13 修复（同步 Load failed 的完整根因）：
+  // - 官方网关 {env}.api.tcloudbasegateway.com 对未在控制台登记的网页来源
+  //   （如 github.io）直接 403（不带跨域头），但对腾讯托管域名
+  //   （*.tcloudbaseapp.com）来源 CORS 完整：预检放行 SDK 全部自定义头，
+  //   鉴权响应也带 Access-Control-Allow-Origin（已 curl 实测）。
+  // - v8 曾把 GATEWAY 一刀切改指 {env}.{region}.tcb-api.tencentcloudapi.com，
+  //   该域名 /auth/* 对任意 Origin 放行（登录可用），但其数据库 REST
+  //   （/web/database/*）在请求携带 authorization 头时，实际响应会丢失
+  //   Access-Control-Allow-Origin（服务端缺陷，curl 实测确认），
+  //   浏览器一律拦截 → 同步报 "Load failed"。
+  // 因此按页面来源分流：腾讯托管版回走官方网关（登录+数据库全通）；
+  // 其他来源（GitHub Pages 等）维持 tcb-api，至少保证登录可用。
   function registerCloudBaseAuthEndPoint(app, config) {
     if (!app || typeof app.registerEndPointWithKey !== 'function') return;
     const env = config.env;
     const region = config.region || 'ap-shanghai';
+    const host = (typeof location !== 'undefined' && location.hostname) || '';
+    const onTencentHosting = host.endsWith('.tcloudbaseapp.com');
     app.registerEndPointWithKey({
       key: 'GATEWAY',
-      url: '//' + env + '.' + region + '.tcb-api.tencentcloudapi.com',
+      url: onTencentHosting
+        ? '//' + env + '.api.tcloudbasegateway.com'
+        : '//' + env + '.' + region + '.tcb-api.tencentcloudapi.com',
       protocol: 'https:',
     });
   }
