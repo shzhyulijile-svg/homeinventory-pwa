@@ -587,7 +587,7 @@
   }
 
   window.showCloudSync=function(){
-    document.getElementById('mod-t').textContent='云同步 v13';
+    document.getElementById('mod-t').textContent='云同步 v14';
     if(!cloudSync){
       document.getElementById('mod-b').innerHTML='<div class="form"><div class="cloud-status">'+esc(cloudStatus.message||'云同步尚未配置')+'</div><div class="cloud-help">本地数据仍会正常保存。配置 CloudBase 环境后，电脑、Android App 和 iOS 网页版即可登录同一账号同步。</div></div>';
       openMod(); return;
@@ -612,7 +612,11 @@
   function cloudErrorText(e){
     let msg=(e&&e.message?e.message:'请稍后重试');
     if(/load failed|failed to fetch|network ?error|the internet connection appears to be offline/i.test(msg)){
-      msg+='（这通常是网络层问题：请确认当前 WiFi/蜂窝网络能正常上网，如开着 VPN/梯子请先关闭再试；也可以打开 diag.html 页面做网络诊断）';
+      if(/(^|\.)github\.io$/.test(location.hostname)){
+        msg='GitHub 版受云平台免费套餐限制（无法把 github.io 加入安全域名白名单），只能登录、不能同步。请改用腾讯托管网址：https://myfirst-test-d8ge3c40585d511d4-1427393886.tcloudbaseapp.com （首次打开会有"风险提醒"页，点确定即可），那边登录同一邮箱即可正常同步。';
+      }else{
+        msg+='（这通常是网络层问题：请确认当前 WiFi/蜂窝网络能正常上网，如开着 VPN/梯子请先关闭再试；也可以打开 diag.html 页面做网络诊断）';
+      }
     }
     return msg;
   }
